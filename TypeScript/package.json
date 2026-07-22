@@ -1,0 +1,57 @@
+{
+  "name": "@weirgate/sdk",
+  "version": "0.1.0",
+  "description": "Official TypeScript SDK for the Weirgate capability gateway",
+  "license": "MIT",
+  "author": "Weirgate",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "spec-provenance.json"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/weirgate/weirgate-sdk.git",
+    "directory": "TypeScript"
+  },
+  "homepage": "https://github.com/weirgate/weirgate-sdk/tree/main/TypeScript#readme",
+  "bugs": {
+    "url": "https://github.com/weirgate/weirgate-sdk/issues"
+  },
+  "keywords": [
+    "weirgate",
+    "ai",
+    "llm",
+    "byok",
+    "typescript",
+    "sdk"
+  ],
+  "scripts": {
+    "generate": "node scripts/generate.mjs",
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run typecheck && vitest run",
+    "prepack": "npm run build"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.8.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

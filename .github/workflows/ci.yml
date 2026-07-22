@@ -1,0 +1,45 @@
+name: SDK CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/check-public-api-boundary.mjs
+
+  typescript:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: TypeScript
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: TypeScript/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npm publish --dry-run
+
+  swift:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: WeirgateKit
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test
