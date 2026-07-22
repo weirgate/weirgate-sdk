@@ -256,6 +256,14 @@ export class Weirgate {
               "Weirgate stream contained invalid JSON",
             );
           }
+          if (!Array.isArray(chunk.choices)) {
+            throw new WeirgateStreamError(
+              "invalid_frame",
+              metadata.requestId,
+              metadata.apiVersion,
+              "Weirgate stream frame omitted choices",
+            );
+          }
           if (chunk.usage) sawFinalUsage = true;
           if (chunk.choices.some((choice) => choice["finish_reason"] != null)) sawFinishReason = true;
           yield chunk;

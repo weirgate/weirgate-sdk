@@ -140,6 +140,22 @@ describe("Weirgate", () => {
     expect(error).toMatchObject({ reason: "interrupted", requestId: "req_12345678" });
   });
 
+  it("reports a valid JSON frame without choices as an invalid frame", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(
+      'data: {"id":"c1","object":"chat.completion.chunk"}\n\n',
+      { headers: { ...responseHeaders, "Content-Type": "text/event-stream" } },
+    ));
+    const client = new Weirgate({ appId: "wyvo", token: "jwt", fetch: fetcher });
+    const stream = await client.streamChat("coach-chat", { messages: [{ role: "user", content: "hello" }] });
+
+    const consume = async () => {
+      for await (const _ of stream.chunks) { /* consume */ }
+    };
+    const error = await consume().catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(WeirgateStreamError);
+    expect(error).toMatchObject({ reason: "invalid_frame", requestId: "req_12345678" });
+  });
+
   it("makes usage truncation impossible to ignore in completeUsage", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
       group_by: "feature",
