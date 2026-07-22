@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Official TypeScript SDK for the Weirgate capability gateway",
   "license": "MIT",
+  "publishConfig": { "access": "public" },
   "author": "Weirgate",
   "type": "module",
   "sideEffects": false,
@@ -46,6 +47,7 @@
     "build": "tsup src/index.ts --format esm,cjs --dts --clean",
     "typecheck": "tsc --noEmit",
     "test": "npm run typecheck && vitest run",
+    "proof:s12": "npm run build && node scripts/s12-proof.mjs",
     "prepack": "npm run build"
   },
   "devDependencies": {
