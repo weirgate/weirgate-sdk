@@ -2,6 +2,9 @@
 
 Swift Package Manager client for the public Weirgate API frozen at version `2026-07-18`.
 
+Add `https://github.com/weirgate/weirgate-sdk.git` as a package dependency and select the
+`WeirgateKit` product.
+
 ```swift
 import WeirgateKit
 
@@ -24,5 +27,5 @@ for try await chunk in stream.chunks {
 logged by the package, and requests use an ephemeral URL session with no URL cache.
 Typed HTTP failures use `WeirgateError.type`; consumers never inspect message strings.
 
-The package is ready to consume by git URL when this repository becomes public. It has
-not been published and the repository remains private.
+See the [SDK guide](https://weirgate.com/guides/sdks/) and
+[API reference](https://weirgate.com/reference/api/) for the public contract.

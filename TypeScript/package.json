@@ -30,7 +30,7 @@
     "url": "git+https://github.com/weirgate/weirgate-sdk.git",
     "directory": "TypeScript"
   },
-  "homepage": "https://github.com/weirgate/weirgate-sdk/tree/main/TypeScript#readme",
+  "homepage": "https://weirgate.com/guides/sdks/",
   "bugs": {
     "url": "https://github.com/weirgate/weirgate-sdk/issues"
   },
@@ -39,6 +39,7 @@
     "ai",
     "llm",
     "byok",
+    "openai-compatible",
     "typescript",
     "sdk"
   ],
