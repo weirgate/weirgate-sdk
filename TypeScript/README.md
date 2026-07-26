@@ -2,6 +2,10 @@
 
 Typed TypeScript client for the public Weirgate API frozen at version `2026-07-18`.
 
+```sh
+npm install @weirgate/sdk
+```
+
 ```ts
 import { Weirgate } from "@weirgate/sdk";
 
@@ -27,7 +31,8 @@ Mutations receive an automatic `X-Idempotency-Key`; pass `idempotencyKey` to ove
 Server failures are `WeirgateError` values keyed by `error.type`, never message text.
 Every result and error carries `requestId` and `apiVersion` correlation metadata.
 
-The package is publish-ready but has not been published.
+See the [SDK guide](https://weirgate.com/guides/sdks/) and
+[API reference](https://weirgate.com/reference/api/) for the public contract.
 
 ## Regeneration
 
