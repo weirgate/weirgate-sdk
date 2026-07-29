@@ -2,6 +2,8 @@
 
 Official clients for the public Weirgate API frozen at `Weirgate-Api-Version: 2026-07-18`.
 
+Private beta — invite only; request access: [hello@weirgate.com](mailto:hello@weirgate.com).
+
 - [`TypeScript/`](./TypeScript/) — `@weirgate/sdk` for TypeScript and JavaScript.
 - [`WeirgateKit/`](./WeirgateKit/) — `WeirgateKit` for iOS 17+ and macOS 14+.
 
