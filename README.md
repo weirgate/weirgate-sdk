@@ -25,5 +25,17 @@ root package manifest makes tagged releases directly resolvable from that URL.
 The clients require application-issued end-user JWTs. Provider credentials remain
 ephemeral per request and are never persisted or logged by either SDK.
 
+## Account deletion
+
+Both SDKs expose token-bound account deletion: TypeScript
+`deleteAccount(): Promise<WeirgateResult<AccountDeletionResult>>` and Swift
+`deleteAccount() async throws -> WeirgateResponse<AccountDeletionResult>`. The service
+derives the target only from the fresh end-user token and app ID; neither method accepts
+an external user ID or management credential.
+
+Apps must delete in this order: call Weirgate first while the token is valid, require a
+successful response, then delete the identity-provider user. If the second step fails,
+reauthenticate as needed and retry the sequence; Weirgate replay is idempotent.
+
 Read the [SDK guide](https://weirgate.com/guides/sdks/) and
 [API reference](https://weirgate.com/reference/api/).

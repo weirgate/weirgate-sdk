@@ -48,6 +48,11 @@ public actor WeirgateClient {
         return try await execute(request)
     }
 
+    public func deleteAccount() async throws -> WeirgateResponse<AccountDeletionResult> {
+        let request = try await makeRequest(path: "v1/account", method: "DELETE")
+        return try await execute(request)
+    }
+
     public func chat(
         featureID: String,
         request input: ChatCompletionRequest,

@@ -14,6 +14,7 @@ export type EmbeddingResponse = components["schemas"]["EmbeddingResponse"];
 export type FeatureCatalog = components["schemas"]["FeatureCatalog"];
 export type FeatureCatalogEntry = components["schemas"]["FeatureCatalogEntry"];
 export type Balance = components["schemas"]["Balance"];
+export type AccountDeletionResult = components["schemas"]["AccountDeletionResult"];
 export type ClientTelemetryInput = components["schemas"]["ClientTelemetryInput"];
 export type Accepted = components["schemas"]["Accepted"];
 export type OutputContract = components["schemas"]["OutputContract"];

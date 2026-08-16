@@ -162,6 +162,19 @@ public struct Balance: Codable, Sendable, Equatable {
     }
 }
 
+public struct AccountDeletionResult: Codable, Sendable, Equatable {
+    public let deleted: Bool
+    public let idempotent: Bool
+    public let userID: String?
+    public let anonymizedAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case deleted, idempotent
+        case userID = "user_id"
+        case anonymizedAt = "anonymized_at"
+    }
+}
+
 public struct ClientTelemetry: Codable, Sendable {
     public struct SDK: Codable, Sendable {
         public let name: String

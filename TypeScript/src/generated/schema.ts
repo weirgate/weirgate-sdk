@@ -95,6 +95,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Anonymize the authenticated app user's Weirgate account
+         * @description The target external identity is derived exclusively from the verified end-user bearer token; callers cannot select another user. The operation is idempotent and does not provision an app-user row when none is active. Identity and retained traces are scrubbed while ledger and usage history remain attached only to the opaque tombstone. Applications must complete this operation while the token is valid, before deleting the user from their identity provider; retrying after a partial failure is safe.
+         */
+        delete: operations["deleteAccount"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/telemetry/client": {
         parameters: {
             query?: never;
@@ -1574,6 +1594,19 @@ export interface components {
             /** @description Present only when provider_visible is true. Capability-only entries omit it. */
             model?: string;
         };
+        AccountDeletionResult: {
+            /** @constant */
+            deleted: true;
+            /** @description True when no active app-user row existed at execution time. */
+            idempotent: boolean;
+            /** @description Opaque tombstoned user ID; present only when this request anonymized an active row. */
+            user_id?: string;
+            /**
+             * Format: date-time
+             * @description Present only when this request anonymized an active row.
+             */
+            anonymized_at?: string;
+        };
         Balance: {
             units_available: number;
             units_pending: number;
@@ -2693,6 +2726,17 @@ export interface components {
                 };
             };
         };
+        /** @description Idempotent self-service anonymization result */
+        AccountDeletionOk: {
+            headers: {
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["AccountDeletionResult"];
+            };
+        };
         /** @description Idempotent anonymization result */
         UserDeleteOk: {
             headers: {
@@ -2701,14 +2745,7 @@ export interface components {
                 [name: string]: unknown;
             };
             content: {
-                "application/json": {
-                    /** @constant */
-                    deleted: true;
-                    idempotent: boolean;
-                    user_id?: string;
-                    /** Format: date-time */
-                    anonymized_at?: string;
-                };
+                "application/json": components["schemas"]["AccountDeletionResult"];
             };
         };
         /** @description Visible config and durable revision metadata */
@@ -3527,6 +3564,24 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["InvalidToken"];
             404: components["responses"]["ResourceNotFound"];
+        };
+    };
+    deleteAccount: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-App-Id": components["parameters"]["XAppId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AccountDeletionOk"];
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            404: components["responses"]["ResourceNotFound"];
+            500: components["responses"]["Internal"];
         };
     };
     ingestClientTelemetry: {
