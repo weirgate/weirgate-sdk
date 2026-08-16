@@ -2,6 +2,19 @@
 
 All notable public SDK changes are recorded here.
 
+## 0.1.1 — 2026-08-15
+
+### TypeScript
+
+- Added typed `assignUserTier` and `revertUserTier` management methods with explicit
+  idempotency-key support, plus refreshed generated types from the frozen API contract.
+
+### Swift
+
+- Added the additive `resource_conflict` typed error used by global app ownership and
+  tier-mutation idempotency conflicts. The Swift package remains an end-user data-plane
+  client; management mutations stay server-side.
+
 ## 0.1.0 — 2026-07-26
 
 Initial public release for `Weirgate-Api-Version: 2026-07-18`.

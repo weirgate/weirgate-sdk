@@ -43,6 +43,7 @@ func errorRegistry() {
         "invalid_request", "invalid_token", "user_provider_key_required",
         "user_provider_key_invalid", "insufficient_scope", "out_of_allowance",
         "abuse_blocked", "feature_disabled", "feature_not_found", "resource_not_found",
+        "resource_conflict",
         "provider_policy_blocked", "output_contract_unsupported", "output_contract_violation",
         "proposal_stale", "rate_limited", "telemetry_request_unavailable",
         "provider_unavailable", "internal"
@@ -100,6 +101,7 @@ func providerKeyRedaction() throws {
 
 @Test("package records frozen spec provenance")
 func provenance() {
+    #expect(WeirgateKitInfo.version == "0.1.1")
     #expect(WeirgateKitInfo.apiVersion == "2026-07-18")
-    #expect(WeirgateKitInfo.specSourceCommit == "69a4e6b2f081ff9c7afd8cdc12618f9e2bd84a82")
+    #expect(WeirgateKitInfo.specSourceCommit == "7fe56e7ae2353d353f24e04151fa9175a9a98293")
 }

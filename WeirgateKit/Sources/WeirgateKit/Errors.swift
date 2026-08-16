@@ -11,6 +11,7 @@ public enum WeirgateErrorType: String, Codable, CaseIterable, Sendable {
     case featureDisabled = "feature_disabled"
     case featureNotFound = "feature_not_found"
     case resourceNotFound = "resource_not_found"
+    case resourceConflict = "resource_conflict"
     case providerPolicyBlocked = "provider_policy_blocked"
     case outputContractUnsupported = "output_contract_unsupported"
     case outputContractViolation = "output_contract_violation"

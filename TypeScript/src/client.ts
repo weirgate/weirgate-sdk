@@ -16,6 +16,9 @@ import {
   type ResponseMetadata,
   type UsageQuery,
   type UsageRollupPage,
+  type UserTierAssignmentInput,
+  type UserTierChangeResult,
+  type UserTierRevertInput,
   type WeirgateResult,
 } from "./types.js";
 import {
@@ -169,6 +172,34 @@ export class Weirgate {
       );
     }
     return result;
+  }
+
+  assignUserTier(
+    appId: string,
+    externalId: string,
+    input: UserTierAssignmentInput,
+    options: RequestOptions = {},
+  ): Promise<WeirgateResult<UserTierChangeResult>> {
+    return this.requestJson(
+      "PUT",
+      `/v1/admin/apps/${encodeURIComponent(appId)}/users/${encodeURIComponent(externalId)}/tier`,
+      input,
+      { admin: true, ...options },
+    );
+  }
+
+  revertUserTier(
+    appId: string,
+    externalId: string,
+    input: UserTierRevertInput = {},
+    options: RequestOptions = {},
+  ): Promise<WeirgateResult<UserTierChangeResult>> {
+    return this.requestJson(
+      "DELETE",
+      `/v1/admin/apps/${encodeURIComponent(appId)}/users/${encodeURIComponent(externalId)}/tier`,
+      input,
+      { admin: true, ...options },
+    );
   }
 
   private async requestJson<T>(

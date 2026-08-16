@@ -1,6 +1,6 @@
 {
   "name": "@weirgate/sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Official TypeScript SDK for the Weirgate capability gateway",
   "license": "MIT",
   "publishConfig": { "access": "public" },

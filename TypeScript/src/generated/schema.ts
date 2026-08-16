@@ -115,6 +115,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/stripe/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Receive a signature-verified idempotent Stripe billing event
+         * @description The exact raw body is verified before parsing. Durable event-id deduplication precedes audited tenant subscription state changes. This path never invokes app-user grant or reversal primitives.
+         */
+        post: operations["receiveStripeWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/whoami": {
         parameters: {
             query?: never;
@@ -126,6 +146,225 @@ export interface paths {
         get: operations["getManagementIdentity"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Idempotently provision and read the Clerk organization tenant
+         * @description Developer identity is distinct from every app's end-user auth configuration.
+         */
+        post: operations["provisionDeveloperSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read tenant tier, provisional usage, invoices, and append-only statements */
+        get: operations["getTenantBilling"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/checkout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a Stripe-hosted subscription checkout session
+         * @description Requires a tenant owner with a recent second factor. Tier state changes only from verified Stripe webhooks.
+         */
+        post: operations["createBillingCheckout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/portal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a Stripe-hosted customer portal session
+         * @description Requires a tenant owner with a recent second factor.
+         */
+        post: operations["createBillingPortal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/catalog/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Idempotently create the approved Stripe test-mode catalog */
+        post: operations["setupStripeTestCatalog"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/design-partner": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Enroll a tenant in the approved six-month design-partner schedule */
+        post: operations["enrollBillingDesignPartner"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/statements/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Close one UTC month and post paid-tier overage invoice items */
+        post: operations["closeTenantBillingStatement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/billing/statements/correct": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Append a closed-month correction and credit matching finalized Stripe lines */
+        post: operations["correctFinalizedTenantBillingStatement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/session-grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Authorize a bounded MCP or CLI grant from a developer session
+         * @description Defaults to propose scope; apply requires a recent Clerk second factor.
+         */
+        post: operations["authorizeSessionGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Weirgate-owned tenant memberships and roles */
+        get: operations["listDeveloperMembers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/members/{developerIdentityId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change a Weirgate-owned tenant role
+         * @description Owner-only. Requires a recent second factor and preserves at least one tenant owner.
+         */
+        patch: operations["updateDeveloperMemberRole"];
+        trace?: never;
+    };
+    "/v1/session-grants/exchange": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Exchange a single-use consent code for a reveal-once bounded key */
+        post: operations["exchangeSessionGrant"];
         delete?: never;
         options?: never;
         head?: never;
@@ -231,10 +470,16 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Create or replace a write-only provider key */
+        /**
+         * Create or replace a write-only provider key
+         * @description Clerk developer sessions require a recent second factor.
+         */
         put: operations["putProviderKey"];
         post?: never;
-        /** Soft-revoke a provider key */
+        /**
+         * Soft-revoke a provider key
+         * @description Clerk developer sessions require a recent second factor.
+         */
         delete: operations["revokeProviderKey"];
         options?: never;
         head?: never;
@@ -255,7 +500,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Rotate a write-only provider key */
+        /**
+         * Rotate a write-only provider key
+         * @description Clerk developer sessions require a recent second factor.
+         */
         post: operations["rotateProviderKey"];
         delete?: never;
         options?: never;
@@ -519,6 +767,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/apps/{appId}/users/{externalId}/tier": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Stable key that makes a tier mutation and optional top-up replay-safe. */
+                "X-Idempotency-Key": components["parameters"]["XRequiredIdempotencyKey"];
+            };
+            path: {
+                appId: components["parameters"]["AppIdPath"];
+                externalId: components["parameters"]["ExternalIdPath"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Schedule a configured tier for an app user
+         * @description Creates the user when externalId is unknown, matching the grant endpoint. The assigned tier becomes active on that user's first lazy allowance grant in the next UTC calendar month. top_up_now additionally grants only the positive, not-yet-credited difference between the active and target monthly allowances for the current UTC month; downgrades never claw back units. Replays with the same X-Idempotency-Key do not repeat the mutation, audit event, or top-up.
+         */
+        put: operations["assignUserTier"];
+        post?: never;
+        /**
+         * Schedule a user to return to the app default tier
+         * @description Creates the user when externalId is unknown, matching the grant endpoint, and schedules the app's current default tier for the next UTC calendar month. top_up_now follows the same positive-delta, no-clawback semantics as assignment. Clerk dashboard sessions require recent second-factor verification.
+         */
+        delete: operations["revertUserTier"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/apps/{appId}/grants/{grantId}/reverse": {
         parameters: {
             query?: never;
@@ -624,6 +902,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/apps/{appId}/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List active users for an app */
+        get: operations["listUsers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/apps/{appId}/users/{externalId}": {
         parameters: {
             query?: never;
@@ -638,7 +933,10 @@ export interface paths {
         get: operations["getUser"];
         put?: never;
         post?: never;
-        /** Anonymize identity while retaining money history */
+        /**
+         * Anonymize identity while retaining money history
+         * @description A Clerk developer session requires a recent second factor.
+         */
         delete: operations["anonymizeUser"];
         options?: never;
         head?: never;
@@ -727,7 +1025,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Apply a proposal by reference with base-revision CAS */
+        /**
+         * Apply a proposal by reference with base-revision CAS
+         * @description A Clerk developer session requires a recent second factor.
+         */
         post: operations["applyConfigProposal"];
         delete?: never;
         options?: never;
@@ -846,7 +1147,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create a named deterministic sandbox session */
+        /**
+         * Create a named deterministic sandbox session
+         * @description Clerk developer sessions require a recent second factor.
+         */
         post: operations["createSandboxSession"];
         delete?: never;
         options?: never;
@@ -880,7 +1184,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Run a named deterministic fixture */
+        /**
+         * Run a named deterministic fixture
+         * @description Clerk developer sessions require a recent second factor.
+         */
         post: operations["runSandboxFixture"];
         delete?: never;
         options?: never;
@@ -969,6 +1276,23 @@ export interface components {
             environment: "test" | "live";
             /** Format: date-time */
             expires_at: string | null;
+        } | {
+            actor: {
+                /** @constant */
+                type: "clerk_session";
+                user_id: string;
+                session_id: string;
+            };
+            tenant_id: components["schemas"]["TenantId"];
+            app_ids: string[];
+            /** @constant */
+            scope: "apply";
+            tool_groups: string[];
+            /** @constant */
+            environment: "live";
+            /** Format: date-time */
+            expires_at: string;
+            second_factor_age_minutes: number | null;
         };
         AgentDocSummary: {
             page_id: string;
@@ -990,6 +1314,121 @@ export interface components {
             api_version: "2026-07-18";
             markdown: string;
         };
+        BillingRedirect: {
+            /** Format: uri */
+            url: string;
+            sessionId: string;
+        };
+        BillingPortalRedirect: {
+            /** Format: uri */
+            url: string;
+        };
+        BillingStatement: {
+            id: string;
+            /** Format: date-time */
+            period_start: string;
+            /** Format: date-time */
+            period_end: string;
+            /** @enum {string} */
+            kind: "statement_draft" | "statement_final" | "correction" | "credit" | "stripe_invoice_items";
+            draft: components["schemas"]["BillingQuantity"];
+            final: components["schemas"]["BillingQuantity"];
+            credit: components["schemas"]["BillingQuantity"];
+            reason: string;
+            reconciliation_case_id: string;
+            stripe_idempotency_key: string;
+            stripe_invoice_item_ids: string[];
+            stripe_invoice_id: string | null;
+            stripe_credit_note_id: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        BillingQuantity: {
+            calls: number;
+            tokens: number;
+        };
+        BillingSummary: {
+            /** @enum {string} */
+            tier: "free" | "pro" | "scale";
+            subscription: components["schemas"]["BillingSubscription"];
+            design_partner: components["schemas"]["BillingDesignPartner"];
+            usage: components["schemas"]["BillingUsage"];
+            tiers: {
+                [key: string]: components["schemas"]["BillingTierPosture"];
+            };
+            invoices: components["schemas"]["BillingInvoice"][];
+            statements: components["schemas"]["BillingStatement"][];
+        };
+        BillingSubscription: {
+            status: string;
+            /** Format: date-time */
+            current_period_end: string | null;
+            cancel_at_period_end: boolean;
+        };
+        BillingDesignPartner: {
+            enrolled: boolean;
+            /** @enum {string} */
+            phase: "none" | "free" | "half" | "complete";
+            /** Format: date-time */
+            started_at: string | null;
+            /** Format: date-time */
+            free_until: string | null;
+            /** Format: date-time */
+            discount_until: string | null;
+        };
+        BillingUsage: {
+            /** Format: date-time */
+            period_start: string;
+            /** Format: date-time */
+            period_end: string;
+            /** @constant */
+            provisional: true;
+            calls: components["schemas"]["BillingMeterConsumption"];
+            tokens: components["schemas"]["BillingMeterConsumption"];
+            blocked_at_cap: boolean;
+        };
+        BillingMeterConsumption: {
+            used: number;
+            included: number;
+            warning_at: number;
+        };
+        BillingTierPosture: {
+            monthlyFeeUsd: number;
+            includedCalls: number;
+            includedTokens: number;
+            blocksAtCap: boolean;
+        };
+        BillingInvoice: {
+            id: string;
+            status: string | null;
+            total: number | null;
+            currency: string | null;
+            /** Format: date-time */
+            created_at: string | null;
+            /** Format: uri */
+            hosted_invoice_url: string | null;
+            /** Format: uri */
+            invoice_pdf: string | null;
+        };
+        StripeTestCatalog: {
+            /** @constant */
+            mode: "test";
+            version: string;
+            products: components["schemas"]["GenericObject"];
+            prices: components["schemas"]["GenericObject"];
+            coupons: components["schemas"]["GenericObject"];
+            portalConfigurationId: string;
+        };
+        BillingStatementClose: {
+            draft: components["schemas"]["BillingStatement"];
+            final: components["schemas"]["BillingStatement"];
+            overage: components["schemas"]["BillingQuantity"];
+            invoice: components["schemas"]["BillingStatement"] | null;
+        };
+        BillingStatementCorrection: {
+            correction: components["schemas"]["BillingStatement"];
+            credit: components["schemas"]["BillingStatement"] | null;
+        };
         AuthPreset: {
             /** @enum {string} */
             id: "firebase" | "supabase" | "clerk" | "custom";
@@ -1010,7 +1449,7 @@ export interface components {
         /** @enum {string} */
         Provider: "openrouter" | "openai" | "anthropic" | "google" | "xai";
         /** @enum {string} */
-        ErrorType: "invalid_request" | "invalid_token" | "user_provider_key_required" | "user_provider_key_invalid" | "insufficient_scope" | "out_of_allowance" | "abuse_blocked" | "feature_disabled" | "feature_not_found" | "resource_not_found" | "provider_policy_blocked" | "output_contract_unsupported" | "output_contract_violation" | "proposal_stale" | "rate_limited" | "telemetry_request_unavailable" | "provider_unavailable" | "internal";
+        ErrorType: "invalid_request" | "invalid_token" | "user_provider_key_required" | "user_provider_key_invalid" | "insufficient_scope" | "out_of_allowance" | "abuse_blocked" | "feature_disabled" | "feature_not_found" | "resource_not_found" | "resource_conflict" | "provider_policy_blocked" | "output_contract_unsupported" | "output_contract_violation" | "proposal_stale" | "rate_limited" | "telemetry_request_unavailable" | "provider_unavailable" | "internal";
         ErrorEnvelope: {
             error: {
                 type: components["schemas"]["ErrorType"];
@@ -1024,6 +1463,20 @@ export interface components {
             ok: true;
             /** @enum {string} */
             mode: "mock" | "live";
+            checks: {
+                /** @constant */
+                database: "ok";
+            };
+        };
+        ReadinessFailure: {
+            /** @constant */
+            ok: false;
+            /** @enum {string} */
+            mode: "mock" | "live";
+            checks: {
+                /** @constant */
+                database: "unavailable";
+            };
         };
         Accepted: {
             /** @constant */
@@ -1225,7 +1678,7 @@ export interface components {
             tenants: components["schemas"]["TenantConfig"][];
         };
         ManagementKeyMintInput: {
-            tenant_id: components["schemas"]["TenantId"];
+            tenant_id?: components["schemas"]["TenantId"];
             /**
              * @default read
              * @enum {string}
@@ -1239,6 +1692,74 @@ export interface components {
             expires_at?: string;
             /** @description Must be true for apply scope. */
             step_up?: boolean;
+        };
+        SessionGrantInput: {
+            /**
+             * @default propose
+             * @enum {string}
+             */
+            scope: "read" | "propose" | "apply";
+            app_ids: string[];
+            tool_groups: string[];
+            /**
+             * @default test
+             * @enum {string}
+             */
+            environment: "test" | "live";
+            /** Format: date-time */
+            expires_at?: string;
+        };
+        DeveloperSession: {
+            actor: {
+                /** @constant */
+                type: "clerk_session";
+                user_id: string;
+                session_id: string;
+            };
+            tenant: {
+                id: components["schemas"]["TenantId"];
+                name: string;
+                /** @description Whether the developer completed explicit tenant naming. */
+                named: boolean;
+                /** Format: date-time */
+                created_at: string;
+            };
+            apps: {
+                id: components["schemas"]["AppId"];
+                name: string;
+                /** Format: date-time */
+                created_at?: string;
+            }[];
+            provisioned: boolean;
+            second_factor_age_minutes: number | null;
+            /** @constant */
+            api_version: "2026-07-18";
+        };
+        DeveloperMember: {
+            id: string;
+            auth_subject: string;
+            /** @enum {string} */
+            role: "owner" | "member";
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            last_seen_at: string;
+        };
+        SessionGrantAuthorization: {
+            code: string;
+            /** Format: date-time */
+            code_expires_at: string;
+            grant: {
+                tenant_id: components["schemas"]["TenantId"];
+                /** @enum {string} */
+                scope: "read" | "propose" | "apply";
+                app_ids: string[];
+                tool_groups: string[];
+                /** @enum {string} */
+                environment: "test" | "live";
+                /** Format: date-time */
+                expires_at: string;
+            };
         };
         ManagementKeyMetadata: {
             id: string;
@@ -1377,6 +1898,17 @@ export interface components {
             reason_code?: string | null;
             /** Format: date-time */
             grace_until?: string | null;
+            /**
+             * @description Optional key_source=user override; developer routes continue to use state.
+             * @enum {string}
+             */
+            user_state?: "allowed" | "warning" | "blocked";
+            /**
+             * Format: date-time
+             * @description Required when user_state is present.
+             */
+            user_checked_at?: string;
+            user_reason_code?: string | null;
         };
         ProviderPolicyDocument: {
             providers: {
@@ -1459,6 +1991,33 @@ export interface components {
             source: string;
             idempotencyKey: string;
             reversed: boolean;
+            /** @description Unix epoch milliseconds */
+            createdAt: number;
+        };
+        UserTierAssignmentInput: {
+            /** @description A tier configured on the target app. */
+            tier: string;
+            /** @default false */
+            top_up_now: boolean;
+        };
+        UserTierRevertInput: {
+            /** @default false */
+            top_up_now: boolean;
+        };
+        UserTierChangeRow: {
+            id: string;
+            appId: components["schemas"]["AppId"];
+            userId: string;
+            /** @enum {string} */
+            operation: "assign" | "revert";
+            previousTier: string;
+            targetTier: string;
+            effectivePeriod: string;
+            topUpNow: boolean;
+            topUpPeriod: string;
+            topUpUnits: number;
+            topUpGrantId: string | null;
+            idempotencyKey: string;
             /** @description Unix epoch milliseconds */
             createdAt: number;
         };
@@ -1583,6 +2142,8 @@ export interface components {
             appId: components["schemas"]["AppId"];
             externalId: string | null;
             tier: string;
+            pendingTier: string | null;
+            pendingTierEffectivePeriod: string | null;
             anonymous: boolean;
             /** @description Unix epoch milliseconds */
             anonymizedAt: number | null;
@@ -1683,6 +2244,7 @@ export interface components {
             resource_type: string;
             resource_id: string;
             detail: components["schemas"]["GenericObject"];
+            request_id: string | null;
             /** Format: date-time */
             created_at: string;
         };
@@ -1696,6 +2258,52 @@ export interface components {
         };
     };
     responses: {
+        /** @description Current developer identity and provisioned tenant context */
+        DeveloperSessionOk: {
+            headers: {
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["DeveloperSession"];
+            };
+        };
+        /** @description Weirgate-owned developer membership and role */
+        DeveloperMemberOk: {
+            headers: {
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["DeveloperMember"];
+            };
+        };
+        /** @description Weirgate-owned developer memberships and roles */
+        DeveloperMemberListOk: {
+            headers: {
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: components["schemas"]["DeveloperMember"][];
+                };
+            };
+        };
+        /** @description Single-use consent code and bounded grant metadata */
+        SessionGrantAuthorized: {
+            headers: {
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["SessionGrantAuthorization"];
+            };
+        };
         /** @description Authenticated management identity and grant bounds */
         ManagementIdentityOk: {
             headers: {
@@ -1938,6 +2546,23 @@ export interface components {
                 };
             };
         };
+        /** @description Idempotent scheduled tier change, optional delta grant, and resulting balance */
+        UserTierChangeOk: {
+            headers: {
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    user: components["schemas"]["UserRow"];
+                    tier_change: components["schemas"]["UserTierChangeRow"];
+                    top_up_grant: components["schemas"]["GrantRow"] | null;
+                    balance: components["schemas"]["StoreBalance"];
+                    idempotent: boolean;
+                };
+            };
+        };
         /** @description Reversed grant and resulting balance */
         GrantReversalOk: {
             headers: {
@@ -2012,7 +2637,26 @@ export interface components {
                 "application/json": components["schemas"]["RulesProposalCreated"];
             };
         };
-        /** @description Existing user, balance, and recent events */
+        /** @description Active app users */
+        UserListOk: {
+            headers: {
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: components["schemas"]["UserRow"][];
+                    pagination: {
+                        limit: number;
+                        returned: number;
+                        truncated: boolean;
+                        next_cursor: string | null;
+                    };
+                };
+            };
+        };
+        /** @description Existing user, balance, grants, tier-change timeline, and recent usage */
         UserOk: {
             headers: {
                 "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
@@ -2023,6 +2667,8 @@ export interface components {
                 "application/json": {
                     user: components["schemas"]["UserRow"];
                     balance: components["schemas"]["StoreBalance"];
+                    grants: components["schemas"]["GrantRow"][];
+                    tier_changes: components["schemas"]["UserTierChangeRow"][];
                     recent_events: components["schemas"]["GenericObject"][];
                     recent_events_pagination: components["schemas"]["Pagination"];
                 };
@@ -2332,11 +2978,29 @@ export interface components {
             };
             content?: never;
         };
+        ResourceConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
         ProposalStale: {
             headers: {
                 [name: string]: unknown;
             };
             content?: never;
+        };
+        /** @description proposal_stale, or resource_conflict when an app identifier is unavailable; ownership is never disclosed */
+        ConfigProposalConflict: {
+            headers: {
+                "X-Weirgate-Error-Type": components["headers"]["ErrorType"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorEnvelope"];
+            };
         };
         RateLimited: {
             headers: {
@@ -2482,6 +3146,12 @@ export interface components {
             };
             content?: never;
         };
+        ErrorResourceConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
         ErrorProposalStale: {
             headers: {
                 [name: string]: unknown;
@@ -2530,6 +3200,8 @@ export interface components {
         XFeatureId: components["schemas"]["FeatureId"];
         /** @description Canonical idempotency carrier for retried mutations. */
         XIdempotencyKey: string;
+        /** @description Stable key that makes a tier mutation and optional top-up replay-safe. */
+        XRequiredIdempotencyKey: string;
         /** @description Required for platform-key access; tenant keys are pinned to their own tenant. */
         TenantIdQuery: components["schemas"]["TenantId"];
         /** @description Required to bind app-scoped provider metadata reads and probes. */
@@ -2682,7 +3354,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Healthy */
+            /** @description Process and database are ready */
             200: {
                 headers: {
                     "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
@@ -2691,6 +3363,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Health"];
+                };
+            };
+            /** @description Process is running but the database is unavailable */
+            503: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadinessFailure"];
                 };
             };
         };
@@ -2877,6 +3560,41 @@ export interface operations {
             404: components["responses"]["TelemetryRequestUnavailable"];
         };
     };
+    receiveStripeWebhook: {
+        parameters: {
+            query?: never;
+            header: {
+                "Stripe-Signature": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GenericObject"];
+            };
+        };
+        responses: {
+            /** @description Event received or already processed */
+            200: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        received: true;
+                        duplicate: boolean;
+                    };
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            500: components["responses"]["Internal"];
+            502: components["responses"]["UpstreamFailure"];
+        };
+    };
     getManagementIdentity: {
         parameters: {
             query?: never;
@@ -2887,6 +3605,347 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["ManagementIdentityOk"];
+            401: components["responses"]["InvalidToken"];
+        };
+    };
+    provisionDeveloperSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["DeveloperSessionOk"];
+            201: components["responses"]["DeveloperSessionOk"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+        };
+    };
+    getTenantBilling: {
+        parameters: {
+            query?: {
+                /** @description Required for platform-key access; tenant keys are pinned to their own tenant. */
+                tenant_id?: components["parameters"]["TenantIdQuery"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tenant billing summary */
+            200: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingSummary"];
+                };
+            };
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+        };
+    };
+    createBillingCheckout: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Canonical idempotency carrier for retried mutations. */
+                "X-Idempotency-Key"?: components["parameters"]["XIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    tier: "pro" | "scale";
+                };
+            };
+        };
+        responses: {
+            /** @description Stripe Checkout redirect */
+            201: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingRedirect"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            502: components["responses"]["UpstreamFailure"];
+        };
+    };
+    createBillingPortal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stripe Portal redirect */
+            201: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingPortalRedirect"];
+                };
+            };
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            502: components["responses"]["UpstreamFailure"];
+        };
+    };
+    setupStripeTestCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Test-mode products, prices, coupons, and portal configuration */
+            201: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StripeTestCatalog"];
+                };
+            };
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            500: components["responses"]["Internal"];
+            502: components["responses"]["UpstreamFailure"];
+        };
+    };
+    enrollBillingDesignPartner: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    tenant_id: components["schemas"]["TenantId"];
+                    /** Format: date-time */
+                    started_at: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Enrollment timestamp */
+            200: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        tenant_id: components["schemas"]["TenantId"];
+                        /** Format: date-time */
+                        started_at: string;
+                    };
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+        };
+    };
+    closeTenantBillingStatement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    tenant_id: components["schemas"]["TenantId"];
+                    /** Format: date-time */
+                    period_start: string;
+                    /** Format: date-time */
+                    period_end: string;
+                    reason: string;
+                    reconciliation_case_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Append-only draft/final records and any Stripe invoice record */
+            201: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingStatementClose"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+            500: components["responses"]["Internal"];
+            502: components["responses"]["UpstreamFailure"];
+        };
+    };
+    correctFinalizedTenantBillingStatement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    tenant_id: components["schemas"]["TenantId"];
+                    /** Format: date-time */
+                    period_start: string;
+                    /** Format: date-time */
+                    period_end: string;
+                    corrected_calls: number;
+                    corrected_tokens: number;
+                    credit_calls: number;
+                    credit_tokens: number;
+                    reason: string;
+                    reconciliation_case_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Append-only correction and any same-line Stripe credit note record */
+            201: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingStatementCorrection"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+            500: components["responses"]["Internal"];
+            502: components["responses"]["UpstreamFailure"];
+        };
+    };
+    authorizeSessionGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionGrantInput"];
+            };
+        };
+        responses: {
+            201: components["responses"]["SessionGrantAuthorized"];
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+        };
+    };
+    listDeveloperMembers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["DeveloperMemberListOk"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+        };
+    };
+    updateDeveloperMemberRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                developerIdentityId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    role: "owner" | "member";
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["DeveloperMemberOk"];
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+        };
+    };
+    exchangeSessionGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    code: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Bounded key metadata plus reveal-once value */
+            201: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MintedManagementKey"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
             401: components["responses"]["InvalidToken"];
         };
     };
@@ -3404,6 +4463,60 @@ export interface operations {
             404: components["responses"]["ResourceNotFound"];
         };
     };
+    assignUserTier: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Stable key that makes a tier mutation and optional top-up replay-safe. */
+                "X-Idempotency-Key": components["parameters"]["XRequiredIdempotencyKey"];
+            };
+            path: {
+                appId: components["parameters"]["AppIdPath"];
+                externalId: components["parameters"]["ExternalIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserTierAssignmentInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["UserTierChangeOk"];
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+            409: components["responses"]["ResourceConflict"];
+        };
+    };
+    revertUserTier: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Stable key that makes a tier mutation and optional top-up replay-safe. */
+                "X-Idempotency-Key": components["parameters"]["XRequiredIdempotencyKey"];
+            };
+            path: {
+                appId: components["parameters"]["AppIdPath"];
+                externalId: components["parameters"]["ExternalIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["UserTierRevertInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["UserTierChangeOk"];
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+            409: components["responses"]["ResourceConflict"];
+        };
+    };
     reverseGrant: {
         parameters: {
             query?: never;
@@ -3516,6 +4629,27 @@ export interface operations {
         requestBody: components["requestBodies"]["RulesProposalBody"];
         responses: {
             201: components["responses"]["RulesProposalCreated"];
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+        };
+    };
+    listUsers: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: components["parameters"]["LimitQuery"];
+            };
+            header?: never;
+            path: {
+                appId: components["parameters"]["AppIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["UserListOk"];
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["InvalidToken"];
             403: components["responses"]["InsufficientScope"];
@@ -3724,7 +4858,7 @@ export interface operations {
             401: components["responses"]["InvalidToken"];
             403: components["responses"]["InsufficientScope"];
             404: components["responses"]["ResourceNotFound"];
-            409: components["responses"]["ProposalStale"];
+            409: components["responses"]["ConfigProposalConflict"];
         };
     };
     cancelConfigProposal: {
@@ -3753,6 +4887,9 @@ export interface operations {
                 limit?: components["parameters"]["LimitQuery"];
                 action?: string;
                 resource_type?: string;
+                actor?: string;
+                since?: string;
+                until?: string;
             };
             header?: never;
             path?: never;
