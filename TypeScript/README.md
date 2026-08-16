@@ -27,6 +27,18 @@ for await (const chunk of stream.chunks) {
 }
 ```
 
+Delete the authenticated user's Weirgate identity before deleting the corresponding
+identity-provider account:
+
+```ts
+const deletion = await client.deleteAccount();
+// After this succeeds, delete the Firebase/Auth user.
+```
+
+The target comes only from the fresh bearer token and `appId`; there is no caller-selected
+external ID. A replay or no-row request returns idempotent success, so the app can retry
+the full Weirgate-first sequence after a partial failure.
+
 Mutations receive an automatic `X-Idempotency-Key`; pass `idempotencyKey` to override it.
 Server failures are `WeirgateError` values keyed by `error.type`, never message text.
 Every result and error carries `requestId` and `apiVersion` correlation metadata.

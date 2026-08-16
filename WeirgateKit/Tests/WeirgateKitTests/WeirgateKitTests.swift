@@ -1,6 +1,33 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import Testing
 @testable import WeirgateKit
+
+private final class StubURLProtocol: URLProtocol, @unchecked Sendable {
+    nonisolated(unsafe) static var handler: (@Sendable (URLRequest) throws -> (HTTPURLResponse, Data))?
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let handler = Self.handler else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+        do {
+            let (response, data) = try handler(request)
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+
+    override func stopLoading() {}
+}
 
 @Test("mixed catalog accepts capability-only entries with no model")
 func mixedCatalogDecode() throws {
@@ -35,6 +62,49 @@ func mixedCatalogDecode() throws {
     #expect(catalog.data[0].featureID == "coach-chat")
     #expect(catalog.data[0].model == nil)
     #expect(catalog.data[1].model == "gpt")
+}
+
+@Test("account deletion uses only the end-user token and app ID")
+func accountDeletionRequest() async throws {
+    let sessionConfiguration = URLSessionConfiguration.ephemeral
+    sessionConfiguration.protocolClasses = [StubURLProtocol.self]
+    let session = URLSession(configuration: sessionConfiguration)
+    StubURLProtocol.handler = { request in
+        #expect(request.url?.path == "/v1/account")
+        #expect(request.httpMethod == "DELETE")
+        #expect(request.httpBody == nil)
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer fresh-jwt")
+        #expect(request.value(forHTTPHeaderField: "X-App-Id") == "wyvo")
+        #expect(request.value(forHTTPHeaderField: "X-Admin-Key") == nil)
+        #expect(request.value(forHTTPHeaderField: "X-Idempotency-Key") != nil)
+        let response = HTTPURLResponse(
+            url: request.url!,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: [
+                "Content-Type": "application/json",
+                "Weirgate-Api-Version": "2026-07-18",
+                "X-Weirgate-Request-Id": "req_account_delete",
+            ]
+        )!
+        let data = Data(#"{"deleted":true,"idempotent":false,"user_id":"internal-user","anonymized_at":"2026-08-16T18:00:00.000Z"}"#.utf8)
+        return (response, data)
+    }
+    defer {
+        StubURLProtocol.handler = nil
+        session.invalidateAndCancel()
+    }
+
+    let client = WeirgateClient(
+        configuration: .init(baseURL: URL(string: "https://api.example.test")!, appID: "wyvo"),
+        tokenProvider: .init { "fresh-jwt" },
+        session: session
+    )
+    let result = try await client.deleteAccount()
+    #expect(result.value.deleted)
+    #expect(!result.value.idempotent)
+    #expect(result.value.userID == "internal-user")
+    #expect(result.metadata.requestID == "req_account_delete")
 }
 
 @Test("the Swift registry exactly covers the frozen enumerable errors")
@@ -103,5 +173,5 @@ func providerKeyRedaction() throws {
 func provenance() {
     #expect(WeirgateKitInfo.version == "0.1.1")
     #expect(WeirgateKitInfo.apiVersion == "2026-07-18")
-    #expect(WeirgateKitInfo.specSourceCommit == "7fe56e7ae2353d353f24e04151fa9175a9a98293")
+    #expect(WeirgateKitInfo.specSourceCommit == "00f542e0276921446e7867170623c67e0f30a7d9")
 }

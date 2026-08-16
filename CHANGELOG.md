@@ -2,18 +2,22 @@
 
 All notable public SDK changes are recorded here.
 
-## 0.1.1 — 2026-08-15
+## 0.1.1 — 2026-08-16
 
 ### TypeScript
 
 - Added typed `assignUserTier` and `revertUserTier` management methods with explicit
   idempotency-key support, plus refreshed generated types from the frozen API contract.
+- Added end-user `deleteAccount()` with a typed `AccountDeletionResult`; the target is
+  derived only from the configured app ID and fresh bearer token.
 
 ### Swift
 
 - Added the additive `resource_conflict` typed error used by global app ownership and
   tier-mutation idempotency conflicts. The Swift package remains an end-user data-plane
   client; management mutations stay server-side.
+- Added end-user `deleteAccount()` with the typed tombstone/replay result and documented
+  the required Weirgate-first, identity-provider-second transaction order.
 
 ## 0.1.0 — 2026-07-26
 

@@ -23,6 +23,18 @@ for try await chunk in stream.chunks {
 }
 ```
 
+Delete the authenticated user's Weirgate identity before deleting the corresponding
+identity-provider account:
+
+```swift
+let deletion = try await client.deleteAccount()
+// After this succeeds, delete the Firebase/Auth user.
+```
+
+The target comes only from the fresh bearer token and app ID; no external user ID can be
+supplied. Replays and no-row calls return idempotent success, so retrying the whole
+Weirgate-first sequence after a partial failure is safe.
+
 `UserProviderKey` is accepted only per call. It is redacted from descriptions, never
 logged by the package, and requests use an ephemeral URL session with no URL cache.
 Typed HTTP failures use `WeirgateError.type`; consumers never inspect message strings.

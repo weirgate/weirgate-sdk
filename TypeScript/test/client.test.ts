@@ -63,6 +63,28 @@ describe("Weirgate", () => {
     expect(ERROR_TYPES).toContain((error as WeirgateError).type);
   });
 
+  it("deletes only the bearer-authenticated account with no caller-selected identity", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
+      deleted: true,
+      idempotent: false,
+      user_id: "internal-user",
+      anonymized_at: "2026-08-16T18:00:00.000Z",
+    }));
+    const client = new Weirgate({ appId: "wyvo", token: "fresh-jwt", fetch: fetcher });
+
+    const result = await client.deleteAccount();
+
+    expect(result.data).toMatchObject({ deleted: true, idempotent: false, user_id: "internal-user" });
+    expect(fetcher.mock.calls[0]?.[0]).toBe("https://api.weirgate.com/v1/account");
+    expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ method: "DELETE" });
+    expect(fetcher.mock.calls[0]?.[1]?.body).toBeUndefined();
+    const headers = new Headers(fetcher.mock.calls[0]?.[1]?.headers);
+    expect(headers.get("authorization")).toBe("Bearer fresh-jwt");
+    expect(headers.get("x-app-id")).toBe("wyvo");
+    expect(headers.get("x-admin-key")).toBeNull();
+    expect(headers.get("x-idempotency-key")).toBeTruthy();
+  });
+
   it("decodes a mixed catalog and treats 304 as a cache result", async () => {
     const mixedCatalog = {
       catalog_version: "cat_1_0123456789abcdef",

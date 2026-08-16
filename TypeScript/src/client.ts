@@ -1,5 +1,6 @@
 import {
   API_VERSION,
+  type AccountDeletionResult,
   type Accepted,
   type Balance,
   type CatalogResult,
@@ -81,6 +82,11 @@ export class Weirgate {
   balance(signal?: AbortSignal): Promise<WeirgateResult<Balance>> {
     this.requireAppId();
     return this.requestJson("GET", "/v1/balance", undefined, { signal });
+  }
+
+  deleteAccount(signal?: AbortSignal): Promise<WeirgateResult<AccountDeletionResult>> {
+    this.requireAppId();
+    return this.requestJson("DELETE", "/v1/account", undefined, { signal });
   }
 
   chat(
