@@ -170,4 +170,30 @@ describe("Weirgate", () => {
     expect(error).toBeInstanceOf(UsageTruncatedError);
     expect(error).toMatchObject({ limit: 500, returned: 500, requestId: "req_12345678" });
   });
+
+  it("assigns and reverts user tiers with encoded identities and stable retry keys", async () => {
+    const tierResult = {
+      user: {}, tier_change: {}, top_up_grant: null,
+      balance: { available: 0, pending: 0 }, idempotent: false,
+    };
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(tierResult))
+      .mockResolvedValueOnce(jsonResponse(tierResult));
+    const client = new Weirgate({ adminKey: "wgk_test", fetch: fetcher });
+
+    await client.assignUserTier("wyvo", "person/one", {
+      tier: "early-adopter", top_up_now: true,
+    }, { idempotencyKey: "tier-assign-1" });
+    await client.revertUserTier("wyvo", "person/one", {}, { idempotencyKey: "tier-revert-1" });
+
+    expect(fetcher.mock.calls[0]?.[0]).toBe("https://api.weirgate.com/v1/admin/apps/wyvo/users/person%2Fone/tier");
+    expect(fetcher.mock.calls[0]?.[1]).toMatchObject({
+      method: "PUT",
+      body: JSON.stringify({ tier: "early-adopter", top_up_now: true }),
+    });
+    expect(fetcher.mock.calls[1]?.[1]).toMatchObject({ method: "DELETE", body: "{}" });
+    expect(new Headers(fetcher.mock.calls[0]?.[1]?.headers).get("x-admin-key")).toBe("wgk_test");
+    expect(new Headers(fetcher.mock.calls[0]?.[1]?.headers).get("x-idempotency-key")).toBe("tier-assign-1");
+    expect(new Headers(fetcher.mock.calls[1]?.[1]?.headers).get("x-idempotency-key")).toBe("tier-revert-1");
+  });
 });

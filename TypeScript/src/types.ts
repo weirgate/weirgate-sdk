@@ -19,6 +19,14 @@ export type Accepted = components["schemas"]["Accepted"];
 export type OutputContract = components["schemas"]["OutputContract"];
 export type UsageRollup = components["schemas"]["UsageRollup"];
 export type UsageRollupPage = components["schemas"]["UsageRollupPage"];
+export type UserRow = components["schemas"]["UserRow"];
+export type GrantRow = components["schemas"]["GrantRow"];
+export type StoreBalance = components["schemas"]["StoreBalance"];
+export type UserTierAssignmentInput = Omit<components["schemas"]["UserTierAssignmentInput"], "top_up_now">
+  & { top_up_now?: boolean };
+export type UserTierRevertInput = Partial<components["schemas"]["UserTierRevertInput"]>;
+export type UserTierChange = components["schemas"]["UserTierChangeRow"];
+export type UserTierChangeResult = components["responses"]["UserTierChangeOk"]["content"]["application/json"];
 
 export const API_VERSION = "2026-07-18" as const;
 
@@ -33,6 +41,7 @@ export const ERROR_TYPES = [
   "feature_disabled",
   "feature_not_found",
   "resource_not_found",
+  "resource_conflict",
   "provider_policy_blocked",
   "output_contract_unsupported",
   "output_contract_violation",
