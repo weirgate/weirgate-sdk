@@ -23,11 +23,22 @@ export type UsageRollupPage = components["schemas"]["UsageRollupPage"];
 export type UserRow = components["schemas"]["UserRow"];
 export type GrantRow = components["schemas"]["GrantRow"];
 export type StoreBalance = components["schemas"]["StoreBalance"];
-export type UserTierAssignmentInput = Omit<components["schemas"]["UserTierAssignmentInput"], "top_up_now">
-  & { top_up_now?: boolean };
+export type UserBalance = components["schemas"]["UserBalance"];
+export type UserTierAssignmentInput = Omit<components["schemas"]["UserTierAssignmentInput"], "top_up_now" | "expires_at">
+  & { top_up_now?: boolean; expires_at?: string | Date };
 export type UserTierRevertInput = Partial<components["schemas"]["UserTierRevertInput"]>;
 export type UserTierChange = components["schemas"]["UserTierChangeRow"];
 export type UserTierChangeResult = components["responses"]["UserTierChangeOk"]["content"]["application/json"];
+export type GrantInput = Omit<components["schemas"]["GrantInput"], "idempotency_key">;
+export type GrantResult = components["responses"]["GrantOk"]["content"]["application/json"];
+export type GrantReversalResult = components["responses"]["GrantReversalOk"]["content"]["application/json"];
+export type CreditAdjustmentInput = components["schemas"]["CreditAdjustmentInput"];
+export type CreditAdjustment = components["schemas"]["CreditAdjustmentRow"];
+export type CreditAdjustmentResult = components["responses"]["CreditAdjustmentOk"]["content"]["application/json"];
+export type UserCredits = components["responses"]["UserOk"]["content"]["application/json"];
+export type ManagementKeyMetadata = components["schemas"]["ManagementKeyMetadata"];
+export type ManagementKeyRotateInput = Partial<components["schemas"]["ManagementKeyRotateInput"]>;
+export type RotatedManagementKey = components["schemas"]["RotatedManagementKey"];
 
 export const API_VERSION = "2026-07-18" as const;
 
@@ -38,6 +49,7 @@ export const ERROR_TYPES = [
   "user_provider_key_invalid",
   "insufficient_scope",
   "out_of_allowance",
+  "insufficient_balance",
   "abuse_blocked",
   "feature_disabled",
   "feature_not_found",
@@ -75,6 +87,22 @@ export type CatalogResult =
 export interface RequestOptions {
   idempotencyKey?: string | undefined;
   userProviderKey?: string | undefined;
+  signal?: AbortSignal | undefined;
+}
+
+/**
+ * Credit writes need a key derived from your own durable record (a payment event,
+ * charge, or order ID) so webhook retries replay instead of double-crediting. The SDK
+ * never generates one for these calls.
+ */
+export interface CreditWriteOptions {
+  idempotencyKey: string;
+  signal?: AbortSignal | undefined;
+}
+
+export interface RotateAdminKeyOptions {
+  /** Only for platform keys; tenant keys are pinned to their own tenant. */
+  tenantId?: string | undefined;
   signal?: AbortSignal | undefined;
 }
 

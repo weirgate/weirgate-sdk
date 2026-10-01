@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import {
   API_VERSION,
   ERROR_TYPES,
+  type ErrorType,
+  InsufficientBalanceError,
+  ResourceConflictError,
   UsageTruncatedError,
   Weirgate,
   WeirgateError,
@@ -217,5 +220,154 @@ describe("Weirgate", () => {
     expect(new Headers(fetcher.mock.calls[0]?.[1]?.headers).get("x-admin-key")).toBe("wgk_test");
     expect(new Headers(fetcher.mock.calls[0]?.[1]?.headers).get("x-idempotency-key")).toBe("tier-assign-1");
     expect(new Headers(fetcher.mock.calls[1]?.[1]?.headers).get("x-idempotency-key")).toBe("tier-revert-1");
+  });
+
+  it("sends the tier assignment end date as RFC 3339", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => jsonResponse({}));
+    const client = new Weirgate({ adminKey: "wgk_test", fetch: fetcher });
+
+    await client.assignUserTier("wyvo", "u1", {
+      tier: "early_adopter", expires_at: new Date("2027-03-31T23:59:59Z"),
+    }, { idempotencyKey: "ea-u1" });
+    await client.assignUserTier("wyvo", "u1", { tier: "pro" }, { idempotencyKey: "pro-u1" });
+
+    expect(fetcher.mock.calls[0]?.[1]?.body).toBe(
+      JSON.stringify({ tier: "early_adopter", expires_at: "2027-03-31T23:59:59.000Z" }),
+    );
+    expect(fetcher.mock.calls[1]?.[1]?.body).toBe(JSON.stringify({ tier: "pro" }));
+  });
+});
+
+describe("credits API", () => {
+  const userBalance = { available: 100, pending: 0, unlimited: false, unlimited_until: null };
+
+  it("grants, reverses, and adjusts with the caller's idempotency key on encoded routes", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => jsonResponse({}));
+    const client = new Weirgate({ adminKey: "wgk_credits", fetch: fetcher });
+
+    await client.createGrant("wyvo", "person/one", { units: 100, source: "stripe:cs_1" }, {
+      idempotencyKey: "stripe:cs_1",
+    });
+    await client.reverseGrant("wyvo", "grant/1", { idempotencyKey: "stripe:re_1" });
+    await client.adjustCredits("wyvo", "person/one", {
+      units: -40, reason: "clawback", source: "stripe:re_2",
+    }, { idempotencyKey: "stripe:re_2" });
+
+    const [grant, reverse, adjust] = fetcher.mock.calls;
+    expect(grant?.[0]).toBe("https://api.weirgate.com/v1/admin/apps/wyvo/users/person%2Fone/grants");
+    expect(grant?.[1]).toMatchObject({ method: "POST", body: JSON.stringify({ units: 100, source: "stripe:cs_1" }) });
+    expect(reverse?.[0]).toBe("https://api.weirgate.com/v1/admin/apps/wyvo/grants/grant%2F1/reverse");
+    expect(reverse?.[1]?.body).toBeUndefined();
+    expect(adjust?.[0]).toBe("https://api.weirgate.com/v1/admin/apps/wyvo/users/person%2Fone/adjustments");
+    expect(adjust?.[1]?.body).toBe(JSON.stringify({ units: -40, reason: "clawback", source: "stripe:re_2" }));
+    const keys = fetcher.mock.calls.map((call) => new Headers(call[1]?.headers));
+    expect(keys.map((headers) => headers.get("x-idempotency-key"))).toEqual(["stripe:cs_1", "stripe:re_1", "stripe:re_2"]);
+    for (const headers of keys) {
+      expect(headers.get("x-admin-key")).toBe("wgk_credits");
+      expect(headers.get("x-idempotency-mode")).toBeNull();
+      expect(headers.get("authorization")).toBeNull();
+    }
+  });
+
+  it("refuses credit writes without an idempotency key instead of generating one", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const client = new Weirgate({ adminKey: "wgk_credits", fetch: fetcher });
+    const untyped = client as unknown as {
+      createGrant(...args: unknown[]): Promise<unknown>;
+      reverseGrant(...args: unknown[]): Promise<unknown>;
+      adjustCredits(...args: unknown[]): Promise<unknown>;
+    };
+
+    const attempts = [
+      untyped.createGrant("wyvo", "u1", { units: 1 }, {}),
+      untyped.createGrant("wyvo", "u1", { units: 1 }, { idempotencyKey: "  " }),
+      untyped.reverseGrant("wyvo", "g1", undefined),
+      untyped.adjustCredits("wyvo", "u1", { units: 1, reason: "manual" }, { idempotencyKey: "" }),
+    ];
+    for (const attempt of attempts) await expect(attempt).rejects.toThrow(/idempotencyKey is required/);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("reads one user's credits, including unlimited state", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
+      user: {}, balance: { ...userBalance, unlimited: true, unlimited_until: "2027-03-31T23:59:59.000Z" },
+      grants: [], adjustments: [], tier_changes: [], recent_events: [],
+      recent_events_pagination: { limit: 50, returned: 0, truncated: false },
+    }));
+    const client = new Weirgate({ adminKey: "wgk_credits", fetch: fetcher });
+
+    const result = await client.getUserCredits("wyvo", "person/one");
+
+    expect(fetcher.mock.calls[0]?.[0]).toBe("https://api.weirgate.com/v1/admin/apps/wyvo/users/person%2Fone");
+    expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ method: "GET" });
+    expect(new Headers(fetcher.mock.calls[0]?.[1]?.headers).get("x-idempotency-key")).toBeNull();
+    expect(result.data.balance).toMatchObject({ unlimited: true, unlimited_until: "2027-03-31T23:59:59.000Z" });
+  });
+
+  it("types a below-zero deduction as InsufficientBalanceError", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
+      error: {
+        type: "insufficient_balance",
+        message: "adjustment would take the balance below zero",
+        request_id: "req_body",
+        detail: { available: 30, units: -40 },
+      },
+    }, { status: 402, headers: { "X-Weirgate-Error-Type": "insufficient_balance" } }));
+    const client = new Weirgate({ adminKey: "wgk_credits", fetch: fetcher });
+
+    const error = await client.adjustCredits("wyvo", "u1", { units: -40, reason: "manual" }, {
+      idempotencyKey: "manual-1",
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(InsufficientBalanceError);
+    expect(error).toBeInstanceOf(WeirgateError);
+    expect(error).toMatchObject({ type: "insufficient_balance", status: 402, available: 30, units: -40 });
+  });
+
+  it("types idempotency drift as ResourceConflictError", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
+      error: { type: "resource_conflict", message: "different grant", request_id: "req_body" },
+    }, { status: 409, headers: { "X-Weirgate-Error-Type": "resource_conflict" } }));
+    const client = new Weirgate({ adminKey: "wgk_credits", fetch: fetcher });
+
+    const error = await client.createGrant("wyvo", "u1", { units: 300 }, { idempotencyKey: "stripe:cs_1" })
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ResourceConflictError);
+    expect(error).toMatchObject({ type: "resource_conflict", status: 409, replacedByKeyId: null });
+  });
+
+  it("rotates a key with an overlap and reports the replacement on a second rotation", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ id: "key_new", value: "wgk_new", previous_key: { id: "key_old" } }, {
+        status: 201,
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        error: {
+          type: "resource_conflict",
+          message: "key was already rotated",
+          request_id: "req_body",
+          detail: { replaced_by_key_id: "key_new" },
+        },
+      }, { status: 409, headers: { "X-Weirgate-Error-Type": "resource_conflict" } }));
+    const client = new Weirgate({ adminKey: "wgk_keys", fetch: fetcher });
+
+    const rotated = await client.rotateAdminKey("key_old", { overlap_seconds: 3600 }, { tenantId: "tao" });
+    const again = await client.rotateAdminKey("key_old").catch((caught: unknown) => caught);
+
+    expect(rotated).toMatchObject({ status: 201, data: { value: "wgk_new", previous_key: { id: "key_old" } } });
+    expect(fetcher.mock.calls[0]?.[0]).toBe("https://api.weirgate.com/v1/admin/keys/key_old/rotate?tenant_id=tao");
+    expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ method: "POST", body: JSON.stringify({ overlap_seconds: 3600 }) });
+    expect(fetcher.mock.calls[1]?.[0]).toBe("https://api.weirgate.com/v1/admin/keys/key_old/rotate");
+    expect(fetcher.mock.calls[1]?.[1]?.body).toBe("{}");
+    expect(again).toBeInstanceOf(ResourceConflictError);
+    expect(again).toMatchObject({ replacedByKeyId: "key_new" });
+  });
+
+  it("lists every error type in the spec", () => {
+    type Missing = Exclude<ErrorType, (typeof ERROR_TYPES)[number]>;
+    const complete: [Missing] extends [never] ? true : false = true;
+    expect(complete).toBe(true);
+    expect(ERROR_TYPES).toContain("insufficient_balance");
   });
 });

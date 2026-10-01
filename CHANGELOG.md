@@ -2,6 +2,29 @@
 
 All notable public SDK changes are recorded here.
 
+## Unreleased
+
+### TypeScript
+
+- Added credits API wrappers for developer servers: `createGrant`, `reverseGrant`,
+  `adjustCredits`, and `getUserCredits`, plus `rotateAdminKey` for the credits-only key.
+  Credit writes require a caller-supplied `idempotencyKey`; the SDK never generates one
+  for them, and no longer has any `X-Idempotency-Mode` behavior to opt into.
+- Added typed `InsufficientBalanceError` (`available`, `units`) and
+  `ResourceConflictError` (`replacedByKeyId`), both `WeirgateError` subclasses, and the
+  `insufficient_balance` error type.
+- `assignUserTier` accepts `expires_at` (string or `Date`). Tier and user results, and
+  `balance()`, report `unlimited` and `unlimited_until`.
+- Regenerated types from weirgate `1d4c1c8`. Tier changes can now report
+  `operation: "expire"`.
+- README recipes: Stripe, RevenueCat, and your own backend.
+
+### Swift
+
+- No change; the hand-written client still builds. Credit writes are server-side, so the
+  end-user client never receives `insufficient_balance`. `Balance.unlimited` and
+  `unlimited_until` arrive with weirgate-sdk#9.
+
 ## 0.1.1 — 2026-08-16
 
 ### TypeScript

@@ -40,6 +40,7 @@ external ID. A replay or no-row request returns idempotent success, so the app c
 the full Weirgate-first sequence after a partial failure.
 
 Mutations receive an automatic `X-Idempotency-Key`; pass `idempotencyKey` to override it.
+Credit writes are the exception: they require your own key (see below).
 Server failures are `WeirgateError` values keyed by `error.type`, never message text.
 Every result and error carries `requestId` and `apiVersion` correlation metadata.
 
@@ -55,8 +56,128 @@ await admin.assignUserTier("my-app", "supporter-code-user", {
 }, { idempotencyKey: "supporter-tier-2026-08" });
 ```
 
+Pass `expires_at` (an RFC 3339 string or a `Date`) to end an assignment; an unlimited
+tier then takes effect immediately and ends on time. `balance.unlimited` and
+`balance.unlimited_until` in tier and user results report the active plan, as
+`balance()` does for the end user.
+
 Keep admin keys server-side. End-user applications must not embed this management
 surface or its credential.
+
+## Credits API for your own payment system
+
+Weirgate never charges end users. Your payment system takes the money, and your server
+tells Weirgate how many credits a user gained or lost. Use a credits-only key: minted with
+`scope: "apply"`, `tool_groups: ["credits"]`, explicit `app_ids`, and one `environment`.
+It may omit `expires_at`, and can call only these methods:
+
+| Method | Use it for |
+|---|---|
+| `createGrant(appId, externalId, { units, source }, { idempotencyKey })` | Credits added by a purchase |
+| `reverseGrant(appId, grantId, { idempotencyKey })` | Cancelling a whole grant, e.g. a full refund |
+| `adjustCredits(appId, externalId, { units, reason, source, allow_negative }, { idempotencyKey })` | Signed corrections: deductions, partial clawbacks, goodwill |
+| `getUserCredits(appId, externalId)` | Balance, unlimited state, grants, adjustments, and recent usage |
+
+Writes create the user when the external ID is unknown. Every write requires
+`idempotencyKey`, and the SDK never generates one: derive it from your payment
+system's event, charge, or order ID, never from a timestamp or random value. The same
+key and body replay the original result (adjustments add `idempotent: true`); the same
+key with a different body throws `ResourceConflictError`.
+
+`units` on an adjustment is signed and never zero. `reason` is `manual`, `clawback`, or
+your own text. A deduction that would take the balance below zero throws
+`InsufficientBalanceError` (`available`, `units`) unless `allow_negative` is `true`, which
+is the default for `reason: "clawback"`, so a refund still lands after the credits were
+spent. A negative balance blocks metered requests until it is back above zero.
+
+```ts
+import { InsufficientBalanceError, Weirgate } from "@weirgate/sdk";
+
+const credits = new Weirgate({ adminKey: process.env.WEIRGATE_CREDITS_KEY });
+
+try {
+  await credits.adjustCredits("my-app", userId, { units: -20, reason: "manual", source: `support:${ticketId}` }, {
+    idempotencyKey: `support:${ticketId}`,
+  });
+} catch (error) {
+  if (error instanceof InsufficientBalanceError) {
+    console.log(`only ${error.available} credits left`);
+  } else throw error;
+}
+```
+
+### Recipe: Stripe
+
+In your `checkout.session.completed` handler, after verifying the Stripe signature, look
+up the credits for the price you sold and grant them. Store the grant ID next to your
+order in case you need to reverse it:
+
+```ts
+const { data } = await credits.createGrant("my-app", session.client_reference_id!, {
+  units: CREDITS_BY_PRICE[priceId],
+  source: `stripe:${session.id}`,
+}, { idempotencyKey: `stripe:${session.id}` });
+await orders.save({ stripeSessionId: session.id, weirgateGrantId: data.grant.id });
+```
+
+On `charge.refunded`, key the call by the refund ID. Reverse the grant for a full refund,
+or post a `clawback` adjustment for the refunded share:
+
+```ts
+// `refund` is the Stripe Refund this event reports.
+const order = await orders.findByCharge(charge.id);
+if (charge.amount_refunded === charge.amount) {
+  await credits.reverseGrant("my-app", order.weirgateGrantId, { idempotencyKey: `stripe:${refund.id}` });
+} else {
+  await credits.adjustCredits("my-app", order.userId, {
+    units: -creditsForRefund(order, refund),
+    reason: "clawback",
+    source: `stripe:${refund.id}`,
+  }, { idempotencyKey: `stripe:${refund.id}` });
+}
+```
+
+### Recipe: RevenueCat
+
+In the RevenueCat webhook handler, grant on `NON_RENEWING_PURCHASE` (consumables), with
+`app_user_id` as the external ID. On `CANCELLATION` with `cancel_reason:
+"CUSTOMER_SUPPORT"` (a refund), post a `clawback` with the product's credit count negated:
+
+```ts
+const key = `revenuecat:${event.id}`;
+if (event.type === "NON_RENEWING_PURCHASE") {
+  await credits.createGrant("my-app", event.app_user_id, {
+    units: CREDITS_BY_PRODUCT[event.product_id],
+    source: key,
+  }, { idempotencyKey: key });
+} else if (event.type === "CANCELLATION" && event.cancel_reason === "CUSTOMER_SUPPORT") {
+  await credits.adjustCredits("my-app", event.app_user_id, {
+    units: -CREDITS_BY_PRODUCT[event.product_id],
+    reason: "clawback",
+    source: key,
+  }, { idempotencyKey: key });
+}
+```
+
+### Recipe: your own backend
+
+Call `createGrant` when your system confirms a purchase and `adjustCredits` for any
+correction, keyed by your own durable record ID (for example `order:${order.id}`). Store
+`data.grant.id` with the order if you may need `reverseGrant` later.
+
+### Rotating the credits key
+
+```ts
+const { data } = await admin.rotateAdminKey(keyId, { overlap_seconds: 86_400 });
+// data.value is shown once: store it and deploy it. Before the overlap ends, check
+// that the old key's last_used_at (dashboard or GET /v1/admin/keys) stopped advancing.
+```
+
+The old key keeps working for `overlap_seconds` (default 86400, at most 604800; `0` stops
+it immediately). Call this with a key that has the `keys` tool group, not the credits-only
+key. A key rotates once: rotating it again throws `ResourceConflictError` whose
+`replacedByKeyId` names the replacement. Rotation is not replay-safe, so if the response
+is lost, the new value is gone; rotate the replacement (`replacedByKeyId`) again.
 
 See the [SDK guide](https://weirgate.com/guides/sdks/) and
 [API reference](https://weirgate.com/reference/api/) for the public contract.

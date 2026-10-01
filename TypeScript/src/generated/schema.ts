@@ -83,8 +83,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Read balance, lazily provisioning the app/user row
-         * @description The monthly allowance grant remains lazy until the first metered call.
+         * Read balance after ensuring the current monthly allowance
+         * @description Lazily provisions the authenticated app/user row, ends a time-limited tier assignment whose expires_at has passed (returning the user to the app's default tier with an audited change), activates any scheduled tier for the current UTC period, and issues that period's idempotent monthly allowance grant before returning the balance. Apps whose welcome_grant requires no sign-in also receive that one-time grant here. unlimited is true while the active tier is unlimited; units_available still reports the real balance.
          */
         get: operations["getBalance"];
         put?: never;
@@ -107,9 +107,29 @@ export interface paths {
         post?: never;
         /**
          * Anonymize the authenticated app user's Weirgate account
-         * @description The target external identity is derived exclusively from the verified end-user bearer token; callers cannot select another user. The operation is idempotent and does not provision an app-user row when none is active. Identity and retained traces are scrubbed while ledger and usage history remain attached only to the opaque tombstone. Applications must complete this operation while the token is valid, before deleting the user from their identity provider; retrying after a partial failure is safe.
+         * @description The target external identity is derived exclusively from the verified end-user bearer token; callers cannot select another user. The operation is idempotent and does not provision an app-user row when none is active. Identity and retained traces are scrubbed while ledger and usage history remain attached only to the opaque tombstone. Applications must complete this operation while the token is valid, before deleting the user from their identity provider; retrying after a partial failure is safe. Welcome-credit claims are retained: each holds only a keyed hash of the verified identity (never the raw subject, email, or name), so deleting the account and signing in again cannot claim the welcome grant twice. Retention purpose: fraud prevention.
          */
         delete: operations["deleteAccount"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/welcome-grant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Claim the app's one-time welcome credits
+         * @description Grants the app's configured welcome_grant.units once per verified identity, per app, forever, keyed by HMAC(tenant secret, "<provider>:<sub>"). With require=sign_in_with_apple the identity comes from apple_identity_token (verified against Apple's JWKS: issuer https://appleid.apple.com, audience in the app's apple_client_ids, not expired) or, for auth.mode=firebase, from the verified ID token's linked apple.com identity. Outcomes are typed statuses: granted (a replay by the same user returns granted with idempotent=true), already_claimed (the identity was used by another app user, including a deleted account, or this user already received a welcome grant), and welcome_requires_sign_in (no verified identity was supplied). An invalid or expired Apple token is invalid_request with detail.reason=apple_identity_token_invalid. If Apple's keys cannot be fetched the request fails with retryable provider_unavailable (detail.reason=apple_jwks_unavailable) and a Retry-After header; it never grants or reports already_claimed. Keep sign-in optional in the app (App Review 5.1.1(v)).
+         */
+        post: operations["claimWelcomeGrant"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -590,6 +610,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/keys/{keyId}/rotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Replace a management key, keeping the old one valid for an overlap window
+         * @description Mints a replacement with the same scope, app_ids, tool_groups, environment, and expires_at, and reveals its value once. The old key keeps working for overlap_seconds (default 86400, at most 604800) and then stops; 0 revokes it immediately. A key rotates at most once; a second rotation returns resource_conflict naming replaced_by_key_id. Revoked or expired keys cannot be rotated. Clerk dashboard sessions require recent second-factor verification. The audit event records both key IDs.
+         */
+        post: operations["rotateManagementKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/apps/{appId}/webhook-proposals": {
         parameters: {
             query?: never;
@@ -778,9 +818,29 @@ export interface paths {
         put?: never;
         /**
          * Grant units idempotently
-         * @description X-Idempotency-Key is canonical; body idempotency_key is a deprecated compatibility alias.
+         * @description X-Idempotency-Key is canonical; body idempotency_key is a deprecated compatibility alias. Requires the credits or billing tool group. A reused key with the same body returns the original grant; the same key with a different body returns resource_conflict. Clerk dashboard sessions require recent second-factor verification.
          */
         post: operations["createGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/apps/{appId}/users/{externalId}/adjustments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add or deduct credits with a signed history entry
+         * @description Records a positive or negative adjustment and returns the resulting balance. Creates the user when externalId is unknown, matching the grant endpoint. A negative adjustment that would take available below zero fails with insufficient_balance (detail.available, detail.units), unless allow_negative is true. allow_negative defaults to true when reason is clawback and false otherwise. X-Idempotency-Key is required: the same key and body replay the original result with idempotent=true; the same key with a different body returns resource_conflict. Requires the credits tool group. Clerk dashboard sessions require recent second-factor verification. Emits credits.adjusted.
+         */
+        post: operations["adjustCredits"];
         delete?: never;
         options?: never;
         head?: never;
@@ -803,13 +863,13 @@ export interface paths {
         get?: never;
         /**
          * Schedule a configured tier for an app user
-         * @description Creates the user when externalId is unknown, matching the grant endpoint. The assigned tier becomes active on that user's first lazy allowance grant in the next UTC calendar month. top_up_now additionally grants only the positive, not-yet-credited difference between the active and target monthly allowances for the current UTC month; downgrades never claw back units. Replays with the same X-Idempotency-Key do not repeat the mutation, audit event, or top-up.
+         * @description Creates the user when externalId is unknown, matching the grant endpoint. The assigned tier becomes active on that user's first lazy allowance grant in the next UTC calendar month. Exception: assigning an unlimited tier, or any change while the active tier is unlimited, takes effect immediately. expires_at (optional, RFC 3339, in the future and after the assignment takes effect) ends the assignment; when omitted it defaults to the start plus the tier's default_duration_days, if set, and otherwise the assignment is open-ended. An ended assignment returns the user to the app's default tier on the next balance read or metered request (and on the minute sweep), recorded as an expire change with a tier.expired webhook; tier.expiring is sent expiry_notice_days (default 3) before. top_up_now additionally grants only the positive, not-yet-credited difference between the active and target monthly allowances for the current UTC month; downgrades never claw back units. Replays with the same X-Idempotency-Key do not repeat the mutation, audit event, or top-up.
          */
         put: operations["assignUserTier"];
         post?: never;
         /**
          * Schedule a user to return to the app default tier
-         * @description Creates the user when externalId is unknown, matching the grant endpoint, and schedules the app's current default tier for the next UTC calendar month. top_up_now follows the same positive-delta, no-clawback semantics as assignment. Clerk dashboard sessions require recent second-factor verification.
+         * @description Creates the user when externalId is unknown, matching the grant endpoint, and schedules the app's current default tier for the next UTC calendar month. When the active tier is unlimited the revert takes effect immediately. top_up_now follows the same positive-delta, no-clawback semantics as assignment. Clerk dashboard sessions require recent second-factor verification.
          */
         delete: operations["revertUserTier"];
         options?: never;
@@ -826,7 +886,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Reverse a grant idempotently */
+        /**
+         * Reverse a grant idempotently
+         * @description Requires the credits or billing tool group. A reversal may take the balance negative when the credits were already spent. Reversing an already reversed grant returns it unchanged; an unknown grantId returns resource_not_found. Clerk dashboard sessions require recent second-factor verification.
+         */
         post: operations["reverseGrant"];
         delete?: never;
         options?: never;
@@ -949,7 +1012,10 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Read an existing user, balance, and recent usage */
+        /**
+         * Read an existing user, balance, and recent usage
+         * @description Requires the usage or credits tool group. Includes grants and signed credit adjustments. balance.unlimited and balance.unlimited_until report the active tier's unlimited state, as GET /v1/balance does.
+         */
         get: operations["getUser"];
         put?: never;
         post?: never;
@@ -1469,7 +1535,7 @@ export interface components {
         /** @enum {string} */
         Provider: "openrouter" | "openai" | "anthropic" | "google" | "xai";
         /** @enum {string} */
-        ErrorType: "invalid_request" | "invalid_token" | "user_provider_key_required" | "user_provider_key_invalid" | "insufficient_scope" | "out_of_allowance" | "abuse_blocked" | "feature_disabled" | "feature_not_found" | "resource_not_found" | "resource_conflict" | "provider_policy_blocked" | "output_contract_unsupported" | "output_contract_violation" | "proposal_stale" | "rate_limited" | "telemetry_request_unavailable" | "provider_unavailable" | "internal";
+        ErrorType: "invalid_request" | "invalid_token" | "user_provider_key_required" | "user_provider_key_invalid" | "insufficient_scope" | "out_of_allowance" | "insufficient_balance" | "abuse_blocked" | "feature_disabled" | "feature_not_found" | "resource_not_found" | "resource_conflict" | "provider_policy_blocked" | "output_contract_unsupported" | "output_contract_violation" | "proposal_stale" | "rate_limited" | "telemetry_request_unavailable" | "provider_unavailable" | "internal";
         ErrorEnvelope: {
             error: {
                 type: components["schemas"]["ErrorType"];
@@ -1611,6 +1677,29 @@ export interface components {
             units_available: number;
             units_pending: number;
             tier: string;
+            /** @description True while the active tier is unlimited; metered requests then skip the balance check and debit zero units. */
+            unlimited: boolean;
+            /**
+             * Format: date-time
+             * @description End of the unlimited assignment; null when not unlimited or open-ended.
+             */
+            unlimited_until: string | null;
+        };
+        WelcomeGrantInput: {
+            /** @description Sign in with Apple identity token (JWT). Optional for Firebase apps with a linked apple.com identity. */
+            apple_identity_token?: string;
+        };
+        WelcomeGrantResult: {
+            /** @enum {string} */
+            status: "granted" | "already_claimed" | "welcome_requires_sign_in";
+            /** @description Units granted by this claim; 0 unless status is granted. */
+            units: number;
+            /** @description Present when status is granted. */
+            grant_id?: string;
+            /** @description True when a granted claim was already made by this user. */
+            idempotent: boolean;
+            units_available: number;
+            units_pending: number;
         };
         ClientTelemetryInput: {
             request_id: components["schemas"]["RequestId"];
@@ -1694,13 +1783,33 @@ export interface components {
             default_tier: string;
             tiers: {
                 [key: string]: {
+                    /** @default 0 */
                     monthly_allowance_units: number;
+                    /** @description Skip the balance check and settle zero units; usage, provider cost, and configured velocity rules still apply. */
+                    unlimited?: boolean;
+                    /** @description Default assignment length when expires_at is omitted. */
+                    default_duration_days?: number;
+                    /**
+                     * @description Lead time for tier.expiring.
+                     * @default 3
+                     */
+                    expiry_notice_days: number;
                 };
             };
             features: {
                 [key: string]: components["schemas"]["FeatureConfig"];
             };
             ruleset?: components["schemas"]["GenericObject"];
+            welcome_grant?: {
+                units: number;
+                /**
+                 * @default sign_in_with_apple
+                 * @enum {string}
+                 */
+                require: "sign_in_with_apple" | "none";
+            };
+            /** @description Accepted Sign in with Apple audiences (bundle ID or Services ID). Required for require=sign_in_with_apple unless auth.mode is firebase. */
+            apple_client_ids?: string[];
         };
         TenantConfig: {
             tenant_id: components["schemas"]["TenantId"];
@@ -1721,7 +1830,10 @@ export interface components {
             tool_groups: string[];
             /** @enum {string} */
             environment: "test" | "live";
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Required for apply scope, except a credits-only key: tool_groups exactly [credits] and explicit app_ids (no wildcard). Such a key may be long-lived and is replaced with POST /v1/admin/keys/{keyId}/rotate.
+             */
             expires_at?: string;
             /** @description Must be true for apply scope. */
             step_up?: boolean;
@@ -1810,10 +1922,45 @@ export interface components {
             /** Format: date-time */
             last_used_at: string | null;
             /** Format: date-time */
+            rotated_at?: string | null;
+            replaced_by_key_id?: string | null;
+            /** Format: date-time */
             created_at: string;
         };
         MintedManagementKey: components["schemas"]["ManagementKeyMetadata"] & {
             value: components["schemas"]["ManagementKeyValue"];
+        };
+        ManagementKeyRotateInput: {
+            /**
+             * @description How long the old key keeps working; 0 revokes it immediately.
+             * @default 86400
+             */
+            overlap_seconds: number;
+        };
+        RotatedManagementKey: components["schemas"]["MintedManagementKey"] & {
+            previous_key: components["schemas"]["ManagementKeyMetadata"];
+        };
+        CreditAdjustmentInput: {
+            /** @description Signed; negative deducts. */
+            units: number;
+            /** @description manual, clawback, or developer free text. allowance_expiry is reserved for Weirgate. */
+            reason: string;
+            /** @description Payment reference, e.g. stripe:ch_123. */
+            source?: string;
+            /** @description Defaults to true for reason clawback, otherwise false. */
+            allow_negative?: boolean;
+        };
+        CreditAdjustmentRow: {
+            id: string;
+            appId: components["schemas"]["AppId"];
+            userId: string;
+            units: number;
+            reason: string;
+            source: string | null;
+            idempotencyKey: string;
+            actor: components["schemas"]["GenericObject"] | null;
+            /** @description Unix epoch milliseconds */
+            createdAt: number;
         };
         GrantInput: {
             units: number;
@@ -1953,7 +2100,7 @@ export interface components {
             };
         };
         /** @enum {string} */
-        WebhookEventType: "allowance.low" | "allowance.exhausted" | "rule.breached" | "provider_policy.changed" | "grant.created" | "grant.reversed";
+        WebhookEventType: "allowance.low" | "allowance.exhausted" | "rule.breached" | "provider_policy.changed" | "grant.created" | "grant.reversed" | "credits.adjusted" | "tier.expiring" | "tier.expired";
         WebhookEvent: {
             id: string;
             type: components["schemas"]["WebhookEventType"];
@@ -2032,6 +2179,11 @@ export interface components {
             tier: string;
             /** @default false */
             top_up_now: boolean;
+            /**
+             * Format: date-time
+             * @description When the assignment ends and the user returns to the default tier. Defaults from the tier's default_duration_days.
+             */
+            expires_at?: string;
         };
         UserTierRevertInput: {
             /** @default false */
@@ -2041,8 +2193,13 @@ export interface components {
             id: string;
             appId: components["schemas"]["AppId"];
             userId: string;
-            /** @enum {string} */
-            operation: "assign" | "revert";
+            /**
+             * @description expire means a time-limited assignment ended and the user returned to the app's default tier.
+             * @enum {string}
+             */
+            operation: "assign" | "revert" | "expire";
+            /** @description End of the assignment this change made (Unix epoch milliseconds). */
+            expiresAt: number | null;
             previousTier: string;
             targetTier: string;
             effectivePeriod: string;
@@ -2057,6 +2214,18 @@ export interface components {
         StoreBalance: {
             available: number;
             pending: number;
+        };
+        /** @description StoreBalance plus the user's unlimited state, matching GET /v1/balance. */
+        UserBalance: {
+            available: number;
+            pending: number;
+            /** @description True while the active tier is unlimited; metered requests then skip the balance check and debit zero units. */
+            unlimited: boolean;
+            /**
+             * Format: date-time
+             * @description End of the unlimited assignment; null when not unlimited or open-ended.
+             */
+            unlimited_until: string | null;
         };
         UsageRollup: {
             key: string;
@@ -2180,6 +2349,10 @@ export interface components {
             anonymous: boolean;
             /** @description Unix epoch milliseconds */
             anonymizedAt: number | null;
+            /** @description End of the active tier assignment (Unix epoch milliseconds). */
+            tierExpiresAt: number | null;
+            /** @description End of the pending tier assignment (Unix epoch milliseconds). */
+            pendingTierExpiresAt: number | null;
         };
         /** @description Platform reads return tenants plus a revision map; tenant reads return one visible tenant plus revision. */
         ConfigRead: {
@@ -2579,6 +2752,21 @@ export interface components {
                 };
             };
         };
+        /** @description Recorded or replayed adjustment and resulting balance */
+        CreditAdjustmentOk: {
+            headers: {
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    adjustment: components["schemas"]["CreditAdjustmentRow"];
+                    balance: components["schemas"]["StoreBalance"];
+                    idempotent: boolean;
+                };
+            };
+        };
         /** @description Idempotent scheduled tier change, optional delta grant, and resulting balance */
         UserTierChangeOk: {
             headers: {
@@ -2591,7 +2779,7 @@ export interface components {
                     user: components["schemas"]["UserRow"];
                     tier_change: components["schemas"]["UserTierChangeRow"];
                     top_up_grant: components["schemas"]["GrantRow"] | null;
-                    balance: components["schemas"]["StoreBalance"];
+                    balance: components["schemas"]["UserBalance"];
                     idempotent: boolean;
                 };
             };
@@ -2689,7 +2877,7 @@ export interface components {
                 };
             };
         };
-        /** @description Existing user, balance, grants, tier-change timeline, and recent usage */
+        /** @description Existing user, balance, grants, adjustments, tier-change timeline, and recent usage */
         UserOk: {
             headers: {
                 "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
@@ -2699,8 +2887,9 @@ export interface components {
             content: {
                 "application/json": {
                     user: components["schemas"]["UserRow"];
-                    balance: components["schemas"]["StoreBalance"];
+                    balance: components["schemas"]["UserBalance"];
                     grants: components["schemas"]["GrantRow"][];
+                    adjustments: components["schemas"]["CreditAdjustmentRow"][];
                     tier_changes: components["schemas"]["UserTierChangeRow"][];
                     recent_events: components["schemas"]["GenericObject"][];
                     recent_events_pagination: components["schemas"]["Pagination"];
@@ -2719,6 +2908,7 @@ export interface components {
                     identity: components["schemas"]["GenericObject"];
                     balance: components["schemas"]["StoreBalance"];
                     grants: components["schemas"]["GrantRow"][];
+                    adjustments: components["schemas"]["CreditAdjustmentRow"][];
                     usage: components["schemas"]["GenericObject"][];
                     client_telemetry: components["schemas"]["GenericObject"][];
                     /** Format: date-time */
@@ -3136,6 +3326,12 @@ export interface components {
             content?: never;
         };
         ErrorOutOfAllowance: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
+        ErrorInsufficientBalance: {
             headers: {
                 [name: string]: unknown;
             };
@@ -3582,6 +3778,51 @@ export interface operations {
             401: components["responses"]["InvalidToken"];
             404: components["responses"]["ResourceNotFound"];
             500: components["responses"]["Internal"];
+        };
+    };
+    claimWelcomeGrant: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-App-Id": components["parameters"]["XAppId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["WelcomeGrantInput"];
+            };
+        };
+        responses: {
+            /** @description Typed claim outcome */
+            200: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WelcomeGrantResult"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            404: components["responses"]["ResourceNotFound"];
+            500: components["responses"]["Internal"];
+            /** @description provider_unavailable while Apple's keys cannot be fetched; retry after Retry-After seconds */
+            502: {
+                headers: {
+                    "X-Weirgate-Error-Type": components["headers"]["ErrorType"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     ingestClientTelemetry: {
@@ -4262,6 +4503,42 @@ export interface operations {
             404: components["responses"]["ResourceNotFound"];
         };
     };
+    rotateManagementKey: {
+        parameters: {
+            query?: {
+                /** @description Required for platform-key access; tenant keys are pinned to their own tenant. */
+                tenant_id?: components["parameters"]["TenantIdQuery"];
+            };
+            header?: never;
+            path: {
+                keyId: components["parameters"]["KeyIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ManagementKeyRotateInput"];
+            };
+        };
+        responses: {
+            /** @description Replacement key metadata plus reveal-once value, and the old key's new end */
+            201: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RotatedManagementKey"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+            409: components["responses"]["ResourceConflict"];
+        };
+    };
     createWebhookProposal: {
         parameters: {
             query?: never;
@@ -4516,6 +4793,35 @@ export interface operations {
             401: components["responses"]["InvalidToken"];
             403: components["responses"]["InsufficientScope"];
             404: components["responses"]["ResourceNotFound"];
+            409: components["responses"]["ResourceConflict"];
+        };
+    };
+    adjustCredits: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Stable key that makes the adjustment replay-safe. */
+                "X-Idempotency-Key": string;
+            };
+            path: {
+                appId: components["parameters"]["AppIdPath"];
+                externalId: components["parameters"]["ExternalIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreditAdjustmentInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["CreditAdjustmentOk"];
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            402: components["responses"]["ErrorInsufficientBalance"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+            409: components["responses"]["ResourceConflict"];
         };
     };
     assignUserTier: {
