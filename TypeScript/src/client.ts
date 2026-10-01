@@ -9,14 +9,24 @@ import {
   type ChatCompletionInput,
   type ChatStream,
   type ClientTelemetryInput,
+  type CreditAdjustmentInput,
+  type CreditAdjustmentResult,
+  type CreditWriteOptions,
   type EmbeddingRequest,
   type EmbeddingResponse,
   type FeatureCatalog,
+  type GrantInput,
+  type GrantResult,
+  type GrantReversalResult,
   type Health,
+  type ManagementKeyRotateInput,
   type RequestOptions,
   type ResponseMetadata,
+  type RotateAdminKeyOptions,
+  type RotatedManagementKey,
   type UsageQuery,
   type UsageRollupPage,
+  type UserCredits,
   type UserTierAssignmentInput,
   type UserTierChangeResult,
   type UserTierRevertInput,
@@ -41,6 +51,8 @@ export interface WeirgateOptions {
 interface InternalRequestOptions extends RequestOptions {
   headers?: HeadersInit | undefined;
   admin?: boolean | undefined;
+  /** Reject a missing key instead of generating one. */
+  requireIdempotencyKey?: boolean | undefined;
 }
 
 export class Weirgate {
@@ -186,10 +198,12 @@ export class Weirgate {
     input: UserTierAssignmentInput,
     options: RequestOptions = {},
   ): Promise<WeirgateResult<UserTierChangeResult>> {
+    const { expires_at: expiresAt, ...rest } = input;
+    const body = expiresAt === undefined ? rest : { ...rest, expires_at: dateParameter(expiresAt) };
     return this.requestJson(
       "PUT",
       `/v1/admin/apps/${encodeURIComponent(appId)}/users/${encodeURIComponent(externalId)}/tier`,
-      input,
+      body,
       { admin: true, ...options },
     );
   }
@@ -205,6 +219,86 @@ export class Weirgate {
       `/v1/admin/apps/${encodeURIComponent(appId)}/users/${encodeURIComponent(externalId)}/tier`,
       input,
       { admin: true, ...options },
+    );
+  }
+
+  /** Add purchased credits. The same key and body replay the original grant. */
+  createGrant(
+    appId: string,
+    externalId: string,
+    input: GrantInput,
+    options: CreditWriteOptions,
+  ): Promise<WeirgateResult<GrantResult>> {
+    return this.requestJson(
+      "POST",
+      `/v1/admin/apps/${encodeURIComponent(appId)}/users/${encodeURIComponent(externalId)}/grants`,
+      input,
+      { admin: true, requireIdempotencyKey: true, ...options },
+    );
+  }
+
+  /** Cancel a whole grant, e.g. on a full refund. Reversing twice returns it unchanged. */
+  reverseGrant(
+    appId: string,
+    grantId: string,
+    options: CreditWriteOptions,
+  ): Promise<WeirgateResult<GrantReversalResult>> {
+    return this.requestJson(
+      "POST",
+      `/v1/admin/apps/${encodeURIComponent(appId)}/grants/${encodeURIComponent(grantId)}/reverse`,
+      undefined,
+      { admin: true, requireIdempotencyKey: true, ...options },
+    );
+  }
+
+  /**
+   * Record a signed correction. A deduction below zero throws `InsufficientBalanceError`
+   * unless `allow_negative` is true, which is the default for `reason: "clawback"`.
+   */
+  adjustCredits(
+    appId: string,
+    externalId: string,
+    input: CreditAdjustmentInput,
+    options: CreditWriteOptions,
+  ): Promise<WeirgateResult<CreditAdjustmentResult>> {
+    return this.requestJson(
+      "POST",
+      `/v1/admin/apps/${encodeURIComponent(appId)}/users/${encodeURIComponent(externalId)}/adjustments`,
+      input,
+      { admin: true, requireIdempotencyKey: true, ...options },
+    );
+  }
+
+  /** Balance, unlimited state, grants, adjustments, tier changes, and recent usage. */
+  getUserCredits(
+    appId: string,
+    externalId: string,
+    signal?: AbortSignal,
+  ): Promise<WeirgateResult<UserCredits>> {
+    return this.requestJson(
+      "GET",
+      `/v1/admin/apps/${encodeURIComponent(appId)}/users/${encodeURIComponent(externalId)}`,
+      undefined,
+      { admin: true, signal },
+    );
+  }
+
+  /**
+   * Replace a management key. The new value is revealed once in `data.value`; the old
+   * key keeps working for `overlap_seconds`. A second rotation of the same key throws
+   * `ResourceConflictError` with `replacedByKeyId`.
+   */
+  rotateAdminKey(
+    keyId: string,
+    input: ManagementKeyRotateInput = {},
+    options: RotateAdminKeyOptions = {},
+  ): Promise<WeirgateResult<RotatedManagementKey>> {
+    const suffix = options.tenantId ? `?${new URLSearchParams({ tenant_id: options.tenantId })}` : "";
+    return this.requestJson(
+      "POST",
+      `/v1/admin/keys/${encodeURIComponent(keyId)}/rotate${suffix}`,
+      input,
+      { admin: true, signal: options.signal },
     );
   }
 
@@ -237,6 +331,9 @@ export class Weirgate {
       headers.set("Authorization", `Bearer ${await this.resolveToken()}`);
     }
     if (options.userProviderKey) headers.set("X-User-Provider-Key", options.userProviderKey);
+    if (options.requireIdempotencyKey && !options.idempotencyKey?.trim()) {
+      throw new TypeError("idempotencyKey is required: derive it from your payment event or order ID");
+    }
     if (!safeMethod(method)) headers.set("X-Idempotency-Key", options.idempotencyKey ?? randomIdempotencyKey());
 
     try {

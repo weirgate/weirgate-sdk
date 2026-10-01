@@ -37,5 +37,14 @@ Apps must delete in this order: call Weirgate first while the token is valid, re
 successful response, then delete the identity-provider user. If the second step fails,
 reauthenticate as needed and retry the sequence; Weirgate replay is idempotent.
 
+## Credits API (TypeScript, server-side)
+
+Developer servers that sell credits through their own payment system (Stripe,
+RevenueCat, or a custom backend) use `createGrant`, `reverseGrant`, `adjustCredits`,
+`getUserCredits`, and `rotateAdminKey` with a credits-only management key. Credit writes
+require your own idempotency key. See the
+[TypeScript README](./TypeScript/README.md#credits-api-for-your-own-payment-system) for
+recipes.
+
 Read the [SDK guide](https://weirgate.com/guides/sdks/) and
 [API reference](https://weirgate.com/reference/api/).

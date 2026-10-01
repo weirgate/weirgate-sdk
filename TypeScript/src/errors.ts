@@ -37,7 +37,12 @@ export class WeirgateError extends Error {
     const requestId = response.headers.get("x-weirgate-request-id")
       ?? envelope?.error?.request_id
       ?? "unavailable";
-    return new WeirgateError({
+    const ErrorClass = type === "insufficient_balance"
+      ? InsufficientBalanceError
+      : type === "resource_conflict"
+        ? ResourceConflictError
+        : WeirgateError;
+    return new ErrorClass({
       type,
       status: response.status,
       requestId,
@@ -48,6 +53,43 @@ export class WeirgateError extends Error {
         : {}),
     });
   }
+}
+
+type WeirgateErrorInput = ConstructorParameters<typeof WeirgateError>[0];
+
+/** A deduction would take the balance below zero. `available` is the balance before it. */
+export class InsufficientBalanceError extends WeirgateError {
+  declare readonly type: "insufficient_balance";
+  readonly available: number | null;
+  readonly units: number | null;
+
+  constructor(input: WeirgateErrorInput) {
+    super(input);
+    this.name = "InsufficientBalanceError";
+    this.available = numberDetail(this.detail, "available");
+    this.units = numberDetail(this.detail, "units");
+  }
+}
+
+/**
+ * An idempotency key was reused with a different body, or a key was already rotated.
+ * For a second rotation, `replacedByKeyId` names the existing replacement.
+ */
+export class ResourceConflictError extends WeirgateError {
+  declare readonly type: "resource_conflict";
+  readonly replacedByKeyId: string | null;
+
+  constructor(input: WeirgateErrorInput) {
+    super(input);
+    this.name = "ResourceConflictError";
+    const replacedBy = this.detail?.["replaced_by_key_id"];
+    this.replacedByKeyId = typeof replacedBy === "string" ? replacedBy : null;
+  }
+}
+
+function numberDetail(detail: Record<string, unknown> | null, key: string): number | null {
+  const value = detail?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 export class WeirgateNetworkError extends Error {
