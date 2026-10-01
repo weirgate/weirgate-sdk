@@ -2,7 +2,7 @@
 
 All notable public SDK changes are recorded here.
 
-## Unreleased
+## 0.2.0 — 2026-09-30
 
 ### TypeScript
 
@@ -21,7 +21,7 @@ All notable public SDK changes are recorded here.
 
 ### Swift
 
-- No change; the hand-written client still builds. Credit writes are server-side, so the
+- Version string bumped to 0.2.0; no API change. The hand-written client still builds. Credit writes are server-side, so the
   end-user client never receives `insufficient_balance`. `Balance.unlimited` and
   `unlimited_until` arrive with weirgate-sdk#9.
 

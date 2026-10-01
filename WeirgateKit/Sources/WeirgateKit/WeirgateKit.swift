@@ -1,7 +1,7 @@
 import Foundation
 
 public enum WeirgateKitInfo {
-    public static let version = "0.1.1"
+    public static let version = "0.2.0"
     public static let apiVersion = "2026-07-18"
     public static let specSourceCommit = "00f542e0276921446e7867170623c67e0f30a7d9"
 }
