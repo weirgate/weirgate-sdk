@@ -2,6 +2,33 @@
 
 All notable public SDK changes are recorded here.
 
+## Unreleased
+
+### Swift
+
+- `claimWelcomeCredits(appleIdentityToken:maxAttempts:)` calls `POST /v1/welcome-grant` and
+  returns `WelcomeCreditsClaim` with status `granted`, `alreadyClaimed`, or
+  `requiresSignIn`. Typed `WelcomeCreditsError`: `appleIdentityTokenInvalid`
+  (`detail.reason=apple_identity_token_invalid`), `appleUnavailable` (`provider_unavailable`,
+  retried after `Retry-After`, capped at 30 seconds), and `notConfigured`.
+- `Balance` gains `unlimited`, `unlimitedUntil` (`Date?`), and `appAccountToken` (`UUID`),
+  plus a public initializer. No `allowanceAvailable` / `purchasedAvailable` yet: the server
+  has no balance breakdown until weirgate#87.
+- `redeemAppStoreTransaction(jws:)` calls `POST /v1/purchases/apple` and returns
+  `PurchaseRedemption` (`granted` / `alreadyGranted`, units, optional grant ID, transaction
+  and product IDs, `test` / `live` environment, balance). Typed `PurchaseRedemptionError`
+  for the six `purchase_*` errors and `payments_not_configured`, with
+  `shouldFinishTransaction` true only for `purchase_revoked`.
+- New `WeirgateStoreKit` product (so `WeirgateKit` still doesn't import StoreKit):
+  `WeirgateStoreObserver` redeems `Transaction.unfinished` at start and listens to
+  `Transaction.updates`, buys with `.appAccountToken`, finishes only on 200 or
+  `purchase_revoked`, leaves other rejections unfinished without looping, retries transport
+  errors, 5xx, and `rate_limited` with bounded backoff, never redeems one transaction twice
+  at once, and reports every outcome on `events`.
+- `WeirgateError` gains `reason` (`detail.reason`) and `retryAfter`. `WeirgateErrorType`
+  adds `insufficient_balance` and the six `purchase_*` types, matching the server's list.
+- Spec provenance moves to weirgate `8694e3b`.
+
 ## 0.2.0 — 2026-09-30
 
 ### TypeScript

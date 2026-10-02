@@ -9,6 +9,8 @@ public actor WeirgateClient {
     private let session: URLSession
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
+    private var sleep: @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    private static let maxRetryAfterSeconds: TimeInterval = 30
 
     public init(
         configuration: WeirgateConfiguration,
@@ -46,6 +48,62 @@ public actor WeirgateClient {
     public func balance() async throws -> WeirgateResponse<Balance> {
         let request = try await makeRequest(path: "v1/balance", method: "GET")
         return try await execute(request)
+    }
+
+    /// Claims the app's one-time welcome credits (`POST /v1/welcome-grant`).
+    ///
+    /// Pass the Sign in with Apple identity token
+    /// (`ASAuthorizationAppleIDCredential.identityToken`, UTF-8 decoded). Firebase apps
+    /// whose user already has Apple linked pass `nil`: Weirgate reads the linked
+    /// `apple.com` identity from the Firebase ID token. Apps configured with
+    /// `require: none` also pass `nil`.
+    ///
+    /// Outcomes are typed statuses on ``WelcomeCreditsClaim/status``. An invalid or
+    /// expired Apple token throws ``WelcomeCreditsError`` with
+    /// ``WelcomeCreditsError/Code/appleIdentityTokenInvalid``. When Weirgate can't reach
+    /// Apple's keys the call waits for `Retry-After` (at most 30 seconds) and tries again,
+    /// up to `maxAttempts` in total, then throws
+    /// ``WelcomeCreditsError/Code/appleUnavailable``. Retrying is safe: nothing is granted
+    /// in that case, and a repeat claim by the same user returns its original grant.
+    public func claimWelcomeCredits(
+        appleIdentityToken: String?,
+        maxAttempts: Int = 2
+    ) async throws -> WeirgateResponse<WelcomeCreditsClaim> {
+        let body = try encoder.encode(WelcomeCreditsInput(appleIdentityToken: appleIdentityToken))
+        var attempt = 1
+        while true {
+            do {
+                let request = try await makeRequest(path: "v1/welcome-grant", method: "POST", body: body)
+                return try await execute(request)
+            } catch let error as WeirgateError {
+                guard let typed = WelcomeCreditsError(error) else { throw error }
+                guard typed.isRetryable, attempt < maxAttempts else { throw typed }
+                attempt += 1
+                try await sleep(.seconds(min(typed.retryAfter ?? 1, Self.maxRetryAfterSeconds)))
+            }
+        }
+    }
+
+    /// Redeems one StoreKit 2 consumable purchase for credits (`POST /v1/purchases/apple`).
+    ///
+    /// `jws` is `VerificationResult<Transaction>.jwsRepresentation`. Call
+    /// `Transaction.finish()` only after this returns (`granted` or `alreadyGranted`), or
+    /// after it throws ``PurchaseRedemptionError`` with ``PurchaseRedemptionError/Code/revoked``.
+    /// Any other ``PurchaseRedemptionError`` is permanent for that record: leave it
+    /// unfinished and don't retry in a loop. Transport errors and 5xx responses are worth
+    /// retrying with backoff. `WeirgateStoreKit`'s `WeirgateStoreObserver` applies these
+    /// rules for you.
+    public func redeemAppStoreTransaction(jws: String) async throws -> WeirgateResponse<PurchaseRedemption> {
+        let request = try await makeRequest(
+            path: "v1/purchases/apple",
+            method: "POST",
+            body: encoder.encode(AppStoreRedeemInput(signedTransaction: jws))
+        )
+        do {
+            return try await execute(request)
+        } catch let error as WeirgateError {
+            throw PurchaseRedemptionError(error) ?? error
+        }
     }
 
     public func deleteAccount() async throws -> WeirgateResponse<AccountDeletionResult> {
@@ -282,8 +340,24 @@ public actor WeirgateClient {
             requestID: metadata.requestID,
             apiVersion: metadata.apiVersion,
             serverMessage: envelope?.error.message,
-            detail: envelope?.error.detail
+            detail: envelope?.error.detail,
+            retryAfter: response.value(forHTTPHeaderField: "Retry-After").flatMap(Self.retryAfterSeconds)
         )
+    }
+
+    /// `Retry-After` as delta-seconds or an HTTP date.
+    static func retryAfterSeconds(_ value: String) -> TimeInterval? {
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        if let seconds = TimeInterval(trimmed), seconds >= 0 { return seconds }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "GMT")
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        return formatter.date(from: trimmed).map { max(0, $0.timeIntervalSinceNow) }
+    }
+
+    func setSleepForTesting(_ sleep: @escaping @Sendable (Duration) async throws -> Void) {
+        self.sleep = sleep
     }
 
     private nonisolated static func ephemeralSession() -> URLSession {
