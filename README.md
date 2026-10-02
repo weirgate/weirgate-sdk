@@ -19,8 +19,9 @@ npm install @weirgate/sdk
 ```
 
 For Swift Package Manager, add
-`https://github.com/weirgate/weirgate-sdk.git` and select the `WeirgateKit` product. The
-root package manifest makes tagged releases directly resolvable from that URL.
+`https://github.com/weirgate/weirgate-sdk.git` and select the `WeirgateKit` product (and
+`WeirgateStoreKit` to sell App Store credit packs). The root package manifest makes tagged
+releases directly resolvable from that URL.
 
 The clients require application-issued end-user JWTs. Provider credentials remain
 ephemeral per request and are never persisted or logged by either SDK.
@@ -36,6 +37,16 @@ an external user ID or management credential.
 Apps must delete in this order: call Weirgate first while the token is valid, require a
 successful response, then delete the identity-provider user. If the second step fails,
 reauthenticate as needed and retry the sequence; Weirgate replay is idempotent.
+
+## Welcome credits and App Store purchases (Swift)
+
+`WeirgateKit` claims one-time welcome credits after Sign in with Apple
+(`claimWelcomeCredits(appleIdentityToken:)`), reports unlimited plans and the user's
+`appAccountToken` on `balance()`, and redeems StoreKit 2 consumable purchases
+(`redeemAppStoreTransaction(jws:)`). The separate `WeirgateStoreKit` product adds
+`WeirgateStoreObserver`, which buys with the user's `appAccountToken`, redeems unfinished and
+updated transactions, and finishes each one only when Weirgate credits it or reports it
+refunded. See the [WeirgateKit README](./WeirgateKit/README.md#app-store-credit-packs-weirgatestorekit).
 
 ## Credits API (TypeScript, server-side)
 

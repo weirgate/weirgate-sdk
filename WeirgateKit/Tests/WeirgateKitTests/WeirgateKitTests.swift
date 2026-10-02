@@ -5,14 +5,27 @@ import FoundationNetworking
 import Testing
 @testable import WeirgateKit
 
+/// Serves canned responses per URL host, so tests that each use their own host can run in
+/// parallel.
 private final class StubURLProtocol: URLProtocol, @unchecked Sendable {
-    nonisolated(unsafe) static var handler: (@Sendable (URLRequest) throws -> (HTTPURLResponse, Data))?
+    typealias Handler = @Sendable (URLRequest) throws -> (HTTPURLResponse, Data)
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var handlers: [String: Handler] = [:]
+
+    static func register(host: String, _ handler: @escaping Handler) {
+        lock.withLock { handlers[host] = handler }
+    }
+
+    static func remove(host: String) {
+        _ = lock.withLock { handlers.removeValue(forKey: host) }
+    }
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
-        guard let handler = Self.handler else {
+        let host = request.url?.host ?? ""
+        guard let handler = Self.lock.withLock({ Self.handlers[host] }) else {
             client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
             return
         }
@@ -27,6 +40,89 @@ private final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     }
 
     override func stopLoading() {}
+}
+
+/// A client whose requests go to `handler`, registered under a host unique to the test.
+private func stubbedClient(
+    _ handler: @escaping StubURLProtocol.Handler
+) -> (client: WeirgateClient, tearDown: @Sendable () -> Void) {
+    let host = "\(UUID().uuidString.lowercased()).example.test"
+    StubURLProtocol.register(host: host, handler)
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [StubURLProtocol.self]
+    let session = URLSession(configuration: configuration)
+    let client = WeirgateClient(
+        configuration: .init(baseURL: URL(string: "https://\(host)")!, appID: "wyvo"),
+        tokenProvider: .init { "fresh-jwt" },
+        session: session
+    )
+    return (client, {
+        StubURLProtocol.remove(host: host)
+        session.invalidateAndCancel()
+    })
+}
+
+private func jsonResponse(
+    _ request: URLRequest,
+    status: Int = 200,
+    headers: [String: String] = [:],
+    body: String
+) -> (HTTPURLResponse, Data) {
+    let response = HTTPURLResponse(
+        url: request.url!,
+        statusCode: status,
+        httpVersion: nil,
+        headerFields: [
+            "Content-Type": "application/json",
+            "Weirgate-Api-Version": "2026-07-18",
+            "X-Weirgate-Request-Id": "req_test",
+        ].merging(headers) { $1 }
+    )!
+    return (response, Data(body.utf8))
+}
+
+private func errorResponse(
+    _ request: URLRequest,
+    status: Int,
+    type: String,
+    reason: String? = nil,
+    headers: [String: String] = [:]
+) -> (HTTPURLResponse, Data) {
+    let detail = reason.map { #","detail":{"reason":"\#($0)"}"# } ?? ""
+    return jsonResponse(
+        request,
+        status: status,
+        headers: ["X-Weirgate-Error-Type": type].merging(headers) { $1 },
+        body: #"{"error":{"type":"\#(type)","message":"m","request_id":"req_test"\#(detail)}}"#
+    )
+}
+
+/// Request bodies arrive as a stream through URLProtocol.
+private func bodyJSON(_ request: URLRequest) -> [String: String] {
+    var data = request.httpBody ?? Data()
+    if data.isEmpty, let stream = request.httpBodyStream {
+        stream.open()
+        defer { stream.close() }
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        while stream.hasBytesAvailable {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            if count <= 0 { break }
+            data.append(buffer, count: count)
+        }
+    }
+    return (try? JSONSerialization.jsonObject(with: data) as? [String: String]) ?? [:]
+}
+
+private final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    func syncIncrement() -> Int { lock.withLock { value += 1; return value } }
+    func increment() { _ = syncIncrement() }
+}
+
+private actor Delays {
+    private(set) var values: [Duration] = []
+    func record(_ value: Duration) { values.append(value) }
 }
 
 @Test("mixed catalog accepts capability-only entries with no model")
@@ -66,10 +162,7 @@ func mixedCatalogDecode() throws {
 
 @Test("account deletion uses only the end-user token and app ID")
 func accountDeletionRequest() async throws {
-    let sessionConfiguration = URLSessionConfiguration.ephemeral
-    sessionConfiguration.protocolClasses = [StubURLProtocol.self]
-    let session = URLSession(configuration: sessionConfiguration)
-    StubURLProtocol.handler = { request in
+    let (client, tearDown) = stubbedClient { request in
         #expect(request.url?.path == "/v1/account")
         #expect(request.httpMethod == "DELETE")
         #expect(request.httpBody == nil)
@@ -90,16 +183,8 @@ func accountDeletionRequest() async throws {
         let data = Data(#"{"deleted":true,"idempotent":false,"user_id":"internal-user","anonymized_at":"2026-08-16T18:00:00.000Z"}"#.utf8)
         return (response, data)
     }
-    defer {
-        StubURLProtocol.handler = nil
-        session.invalidateAndCancel()
-    }
+    defer { tearDown() }
 
-    let client = WeirgateClient(
-        configuration: .init(baseURL: URL(string: "https://api.example.test")!, appID: "wyvo"),
-        tokenProvider: .init { "fresh-jwt" },
-        session: session
-    )
     let result = try await client.deleteAccount()
     #expect(result.value.deleted)
     #expect(!result.value.idempotent)
@@ -112,11 +197,13 @@ func errorRegistry() {
     #expect(Set(WeirgateErrorType.allCases.map(\.rawValue)) == Set([
         "invalid_request", "invalid_token", "user_provider_key_required",
         "user_provider_key_invalid", "insufficient_scope", "out_of_allowance",
-        "abuse_blocked", "feature_disabled", "feature_not_found", "resource_not_found",
+        "insufficient_balance", "abuse_blocked", "feature_disabled", "feature_not_found", "resource_not_found",
         "resource_conflict",
         "provider_policy_blocked", "output_contract_unsupported", "output_contract_violation",
         "proposal_stale", "rate_limited", "telemetry_request_unavailable",
-        "provider_unavailable", "internal"
+        "provider_unavailable", "purchase_invalid_signature", "purchase_wrong_app",
+        "purchase_environment_mismatch", "purchase_unknown_product", "purchase_revoked",
+        "purchase_account_mismatch", "internal"
     ]))
 }
 
@@ -173,5 +260,250 @@ func providerKeyRedaction() throws {
 func provenance() {
     #expect(WeirgateKitInfo.version == "0.2.0")
     #expect(WeirgateKitInfo.apiVersion == "2026-07-18")
-    #expect(WeirgateKitInfo.specSourceCommit == "00f542e0276921446e7867170623c67e0f30a7d9")
+    #expect(WeirgateKitInfo.specSourceCommit == "8694e3bd2bb3bf425e0cff1aa0e1cc99e79e6191")
+}
+
+// MARK: - Balance
+
+@Test("balance decodes unlimited state and the app account token")
+func balanceDecode() throws {
+    let unlimited = try JSONDecoder().decode(Balance.self, from: Data(#"""
+    {"units_available":12.5,"units_pending":1,"tier":"early_adopter","unlimited":true,
+     "unlimited_until":"2026-12-25T00:00:00.000Z","app_account_token":"6F9619FF-8B86-D011-B42D-00C04FC964FF"}
+    """#.utf8))
+    #expect(unlimited.unlimited)
+    #expect(unlimited.unlimitedUntil == Date(timeIntervalSince1970: 1_798_156_800))
+    #expect(unlimited.appAccountToken == UUID(uuidString: "6f9619ff-8b86-d011-b42d-00c04fc964ff"))
+    #expect(unlimited.unitsAvailable == 12.5)
+
+    let metered = try JSONDecoder().decode(Balance.self, from: Data(#"""
+    {"units_available":0,"units_pending":0,"tier":"free","unlimited":false,"unlimited_until":null,
+     "app_account_token":"6f9619ff-8b86-d011-b42d-00c04fc964ff"}
+    """#.utf8))
+    #expect(!metered.unlimited)
+    #expect(metered.unlimitedUntil == nil)
+
+    let noFraction = try JSONDecoder().decode(Balance.self, from: Data(#"""
+    {"units_available":0,"units_pending":0,"tier":"vip","unlimited":true,"unlimited_until":"2026-12-25T00:00:00Z",
+     "app_account_token":"6f9619ff-8b86-d011-b42d-00c04fc964ff"}
+    """#.utf8))
+    #expect(noFraction.unlimitedUntil == unlimited.unlimitedUntil)
+
+    let roundTrip = try JSONDecoder().decode(Balance.self, from: JSONEncoder().encode(unlimited))
+    #expect(roundTrip == unlimited)
+}
+
+// MARK: - Welcome credits
+
+@Test("welcome claim sends the Apple token and maps each 200 status")
+func welcomeStatuses() async throws {
+    for (status, expected) in [
+        ("granted", WelcomeCreditsClaim.Status.granted),
+        ("already_claimed", .alreadyClaimed),
+        ("welcome_requires_sign_in", .requiresSignIn),
+    ] {
+        let (client, tearDown) = stubbedClient { request in
+            #expect(request.url?.path == "/v1/welcome-grant")
+            #expect(request.httpMethod == "POST")
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer fresh-jwt")
+            #expect(request.value(forHTTPHeaderField: "X-App-Id") == "wyvo")
+            #expect(bodyJSON(request) == ["apple_identity_token": "apple.jwt"])
+            let grant = status == "granted" ? #","grant_id":"grant_w","units":10"# : #","units":0"#
+            return jsonResponse(request, body: #"{"status":"\#(status)","idempotent":false,"units_available":10,"units_pending":0\#(grant)}"#)
+        }
+        defer { tearDown() }
+        let claim = try await client.claimWelcomeCredits(appleIdentityToken: "apple.jwt").value
+        #expect(claim.status == expected)
+        #expect(claim.unitsAvailable == 10)
+        #expect(claim.grantID == (status == "granted" ? "grant_w" : nil))
+        #expect(claim.units == (status == "granted" ? 10 : 0))
+    }
+}
+
+@Test("welcome claim without a token sends an empty object (Firebase-linked Apple)")
+func welcomeWithoutToken() async throws {
+    let (client, tearDown) = stubbedClient { request in
+        #expect(bodyJSON(request).isEmpty)
+        return jsonResponse(request, body: #"{"status":"granted","units":10,"grant_id":"g","idempotent":true,"units_available":10,"units_pending":0}"#)
+    }
+    defer { tearDown() }
+    let claim = try await client.claimWelcomeCredits(appleIdentityToken: nil).value
+    #expect(claim.status == .granted)
+    #expect(claim.idempotent)
+}
+
+@Test("an invalid Apple token maps to appleIdentityTokenInvalid and is not retried")
+func welcomeInvalidToken() async throws {
+    let calls = Counter()
+    let (client, tearDown) = stubbedClient { request in
+        calls.increment()
+        return errorResponse(request, status: 400, type: "invalid_request", reason: "apple_identity_token_invalid")
+    }
+    defer { tearDown() }
+    await client.setSleepForTesting { _ in Issue.record("must not sleep") }
+    do {
+        _ = try await client.claimWelcomeCredits(appleIdentityToken: "expired")
+        Issue.record("expected an error")
+    } catch let error as WelcomeCreditsError {
+        #expect(error.code == .appleIdentityTokenInvalid)
+        #expect(!error.isRetryable)
+        #expect(error.underlying.reason == "apple_identity_token_invalid")
+        #expect(error.requestID == "req_test")
+    }
+}
+
+@Test("provider_unavailable honors Retry-After and retries")
+func welcomeRetriesAppleOutage() async throws {
+    let calls = Counter()
+    let delays = Delays()
+    let (client, tearDown) = stubbedClient { request in
+        let attempt = calls.syncIncrement()
+        if attempt == 1 {
+            return errorResponse(request, status: 502, type: "provider_unavailable", reason: "apple_jwks_unavailable", headers: ["Retry-After": "5"])
+        }
+        return jsonResponse(request, body: #"{"status":"granted","units":10,"grant_id":"g","idempotent":false,"units_available":10,"units_pending":0}"#)
+    }
+    defer { tearDown() }
+    await client.setSleepForTesting { await delays.record($0) }
+    let claim = try await client.claimWelcomeCredits(appleIdentityToken: "apple.jwt").value
+    #expect(claim.status == .granted)
+    #expect(await delays.values == [.seconds(5)])
+}
+
+@Test("a lasting Apple outage throws appleUnavailable with Retry-After after maxAttempts")
+func welcomeOutageExhausted() async throws {
+    let delays = Delays()
+    let (client, tearDown) = stubbedClient { request in
+        errorResponse(request, status: 502, type: "provider_unavailable", reason: "apple_jwks_unavailable", headers: ["Retry-After": "120"])
+    }
+    defer { tearDown() }
+    await client.setSleepForTesting { await delays.record($0) }
+    do {
+        _ = try await client.claimWelcomeCredits(appleIdentityToken: "apple.jwt", maxAttempts: 3)
+        Issue.record("expected an error")
+    } catch let error as WelcomeCreditsError {
+        #expect(error.code == .appleUnavailable)
+        #expect(error.isRetryable)
+        #expect(error.retryAfter == 120)
+    }
+    // Two waits between three attempts, each capped at 30 seconds.
+    #expect(await delays.values == [.seconds(30), .seconds(30)])
+}
+
+@Test("welcome claim maps a missing welcome_grant config and passes other errors through")
+func welcomeOtherErrors() async throws {
+    let (notConfigured, tearDownA) = stubbedClient { request in
+        errorResponse(request, status: 404, type: "resource_not_found", reason: "welcome_grant_not_configured")
+    }
+    defer { tearDownA() }
+    await #expect(throws: WelcomeCreditsError.self) {
+        _ = try await notConfigured.claimWelcomeCredits(appleIdentityToken: nil)
+    }
+
+    let (expired, tearDownB) = stubbedClient { request in
+        errorResponse(request, status: 401, type: "invalid_token")
+    }
+    defer { tearDownB() }
+    do {
+        _ = try await expired.claimWelcomeCredits(appleIdentityToken: nil)
+        Issue.record("expected an error")
+    } catch let error as WeirgateError {
+        #expect(error.type == .invalidToken)
+    }
+}
+
+// MARK: - App Store purchases
+
+@Test("redeem sends signed_transaction and decodes the redemption")
+func redeemSuccess() async throws {
+    let (client, tearDown) = stubbedClient { request in
+        #expect(request.url?.path == "/v1/purchases/apple")
+        #expect(request.httpMethod == "POST")
+        #expect(request.value(forHTTPHeaderField: "X-App-Id") == "wyvo")
+        #expect(bodyJSON(request) == ["signed_transaction": "header.payload.signature"])
+        return jsonResponse(request, body: #"""
+        {"status":"granted","units":100,"grant_id":"grant_p","transaction_id":"2000000123","product_id":"com.tmatow4.wyvo.credits.small","environment":"test","units_available":110,"units_pending":0}
+        """#)
+    }
+    defer { tearDown() }
+    let redemption = try await client.redeemAppStoreTransaction(jws: "header.payload.signature").value
+    #expect(redemption == PurchaseRedemption(
+        status: .granted,
+        units: 100,
+        grantID: "grant_p",
+        transactionID: "2000000123",
+        productID: "com.tmatow4.wyvo.credits.small",
+        environment: .test,
+        unitsAvailable: 110,
+        unitsPending: 0
+    ))
+}
+
+@Test("already_granted to another user decodes with zero units and no grant ID")
+func redeemClaimedByOther() async throws {
+    let (client, tearDown) = stubbedClient { request in
+        jsonResponse(request, body: #"""
+        {"status":"already_granted","units":0,"transaction_id":"2000000123","product_id":"p","environment":"live","units_available":5,"units_pending":0}
+        """#)
+    }
+    defer { tearDown() }
+    let redemption = try await client.redeemAppStoreTransaction(jws: "jws").value
+    #expect(redemption.status == .alreadyGranted)
+    #expect(redemption.units == 0)
+    #expect(redemption.grantID == nil)
+    #expect(redemption.environment == .live)
+}
+
+@Test("every purchase rejection maps to a typed PurchaseRedemptionError")
+func redeemErrors() async throws {
+    let cases: [(Int, String, String, PurchaseRedemptionError.Code)] = [
+        (400, "purchase_invalid_signature", "x5c_chain_invalid", .invalidSignature),
+        (422, "purchase_wrong_app", "bundle_id_mismatch", .wrongApp),
+        (422, "purchase_environment_mismatch", "environment_not_allowed", .environmentMismatch),
+        (422, "purchase_unknown_product", "product_not_mapped", .unknownProduct),
+        (409, "purchase_revoked", "transaction_refunded", .revoked),
+        (403, "purchase_account_mismatch", "app_account_token_mismatch", .accountMismatch),
+        (404, "resource_not_found", "payments_not_configured", .paymentsNotConfigured),
+    ]
+    for (status, type, reason, code) in cases {
+        let (client, tearDown) = stubbedClient { request in
+            errorResponse(request, status: status, type: type, reason: reason)
+        }
+        defer { tearDown() }
+        do {
+            _ = try await client.redeemAppStoreTransaction(jws: "jws")
+            Issue.record("expected \(code)")
+        } catch let error as PurchaseRedemptionError {
+            #expect(error.code == code)
+            #expect(error.reason == reason)
+            #expect(error.underlying.statusCode == status)
+            #expect(error.shouldFinishTransaction == (code == .revoked))
+        }
+    }
+    #expect(Set(cases.map(\.3)) == Set(PurchaseRedemptionError.Code.allCases))
+}
+
+@Test("redeem passes server, auth, and unrelated not-found errors through as WeirgateError")
+func redeemPassThrough() async throws {
+    for (status, type, reason) in [(500, "internal", nil), (401, "invalid_token", nil), (404, "resource_not_found", nil as String?)] {
+        let (client, tearDown) = stubbedClient { request in
+            errorResponse(request, status: status, type: type, reason: reason)
+        }
+        defer { tearDown() }
+        do {
+            _ = try await client.redeemAppStoreTransaction(jws: "jws")
+            Issue.record("expected an error")
+        } catch let error as WeirgateError {
+            #expect(error.statusCode == status)
+            #expect(error.type.rawValue == type)
+        }
+    }
+}
+
+@Test("Retry-After parses delta-seconds and HTTP dates")
+func retryAfterParsing() {
+    #expect(WeirgateClient.retryAfterSeconds("5") == 5)
+    #expect(WeirgateClient.retryAfterSeconds(" 0 ") == 0)
+    #expect(WeirgateClient.retryAfterSeconds("soon") == nil)
+    #expect(WeirgateClient.retryAfterSeconds("Wed, 21 Oct 2015 07:28:00 GMT") == 0)
 }

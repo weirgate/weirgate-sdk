@@ -154,11 +154,200 @@ public struct Balance: Codable, Sendable, Equatable {
     public let unitsAvailable: Double
     public let unitsPending: Double
     public let tier: String
+    /// True while the active tier is unlimited: metered requests skip the balance check
+    /// and debit zero units. `unitsAvailable` still reports the real balance.
+    public let unlimited: Bool
+    /// When the unlimited assignment ends; `nil` when not unlimited or open-ended.
+    public let unlimitedUntil: Date?
+    /// Stable per-user-row UUID. Pass it to StoreKit 2 as
+    /// `Product.PurchaseOption.appAccountToken(_:)` so Weirgate can tie each purchase to
+    /// this user. A new user row (an anonymous user after reinstall, or after account
+    /// deletion) has a new token.
+    public let appAccountToken: UUID
+
+    public init(
+        unitsAvailable: Double,
+        unitsPending: Double,
+        tier: String,
+        unlimited: Bool = false,
+        unlimitedUntil: Date? = nil,
+        appAccountToken: UUID
+    ) {
+        self.unitsAvailable = unitsAvailable
+        self.unitsPending = unitsPending
+        self.tier = tier
+        self.unlimited = unlimited
+        self.unlimitedUntil = unlimitedUntil
+        self.appAccountToken = appAccountToken
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        unitsAvailable = try container.decode(Double.self, forKey: .unitsAvailable)
+        unitsPending = try container.decode(Double.self, forKey: .unitsPending)
+        tier = try container.decode(String.self, forKey: .tier)
+        unlimited = try container.decode(Bool.self, forKey: .unlimited)
+        unlimitedUntil = try container.decodeIfPresent(String.self, forKey: .unlimitedUntil)
+            .map { try WeirgateTimestamp.date(from: $0, codingPath: container.codingPath + [CodingKeys.unlimitedUntil]) }
+        appAccountToken = try container.decode(UUID.self, forKey: .appAccountToken)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(unitsAvailable, forKey: .unitsAvailable)
+        try container.encode(unitsPending, forKey: .unitsPending)
+        try container.encode(tier, forKey: .tier)
+        try container.encode(unlimited, forKey: .unlimited)
+        try container.encode(unlimitedUntil.map(WeirgateTimestamp.string(from:)), forKey: .unlimitedUntil)
+        try container.encode(appAccountToken, forKey: .appAccountToken)
+    }
 
     enum CodingKeys: String, CodingKey {
-        case tier
+        case tier, unlimited
         case unitsAvailable = "units_available"
         case unitsPending = "units_pending"
+        case unlimitedUntil = "unlimited_until"
+        case appAccountToken = "app_account_token"
+    }
+}
+
+/// RFC 3339 timestamps as Weirgate sends them, with or without fractional seconds.
+enum WeirgateTimestamp {
+    static func date(from value: String, codingPath: [CodingKey]) throws -> Date {
+        if let date = try? Date.ISO8601FormatStyle(includingFractionalSeconds: true).parse(value) {
+            return date
+        }
+        if let date = try? Date.ISO8601FormatStyle().parse(value) {
+            return date
+        }
+        throw DecodingError.dataCorrupted(.init(codingPath: codingPath, debugDescription: "Expected an RFC 3339 timestamp"))
+    }
+
+    static func string(from date: Date) -> String {
+        date.formatted(Date.ISO8601FormatStyle(includingFractionalSeconds: true))
+    }
+}
+
+/// Result of ``WeirgateClient/claimWelcomeCredits(appleIdentityToken:maxAttempts:)``.
+/// Every outcome is an HTTP 200; switch on ``status``.
+public struct WelcomeCreditsClaim: Codable, Sendable, Equatable {
+    public enum Status: String, Codable, Sendable, Equatable {
+        /// Credits were added. ``WelcomeCreditsClaim/idempotent`` is true when this user
+        /// had already claimed them (a replay).
+        case granted
+        /// This Apple account already claimed on another app user (including a deleted
+        /// one), or this user already received a welcome grant. Stop offering the credits.
+        case alreadyClaimed = "already_claimed"
+        /// No verified identity was supplied. Offer Sign in with Apple.
+        case requiresSignIn = "welcome_requires_sign_in"
+    }
+
+    public let status: Status
+    /// Units granted by this claim; 0 unless `status` is `granted`.
+    public let units: Double
+    /// Present when `status` is `granted`.
+    public let grantID: String?
+    public let idempotent: Bool
+    public let unitsAvailable: Double
+    public let unitsPending: Double
+
+    public init(
+        status: Status,
+        units: Double,
+        grantID: String? = nil,
+        idempotent: Bool = false,
+        unitsAvailable: Double,
+        unitsPending: Double = 0
+    ) {
+        self.status = status
+        self.units = units
+        self.grantID = grantID
+        self.idempotent = idempotent
+        self.unitsAvailable = unitsAvailable
+        self.unitsPending = unitsPending
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case status, units, idempotent
+        case grantID = "grant_id"
+        case unitsAvailable = "units_available"
+        case unitsPending = "units_pending"
+    }
+}
+
+/// Result of ``WeirgateClient/redeemAppStoreTransaction(jws:)``. Finish the StoreKit
+/// transaction after receiving this value (either status).
+public struct PurchaseRedemption: Codable, Sendable, Equatable {
+    public enum Status: String, Codable, Sendable, Equatable {
+        /// This call credited the caller.
+        case granted
+        /// The transaction was credited earlier (by an earlier call or an App Store
+        /// notification). ``PurchaseRedemption/units`` is what the caller received from it.
+        case alreadyGranted = "already_granted"
+    }
+
+    public enum Environment: String, Codable, Sendable, Equatable {
+        /// Apple sandbox (Xcode device builds, TestFlight, App Review).
+        case test
+        /// App Store production.
+        case live
+    }
+
+    public let status: Status
+    /// Units the caller received from this transaction; 0 when another user redeemed a
+    /// record without an `appAccountToken` first.
+    public let units: Double
+    /// Absent when another user redeemed the transaction first.
+    public let grantID: String?
+    public let transactionID: String
+    public let productID: String
+    public let environment: Environment
+    public let unitsAvailable: Double
+    public let unitsPending: Double
+
+    public init(
+        status: Status,
+        units: Double,
+        grantID: String? = nil,
+        transactionID: String,
+        productID: String,
+        environment: Environment,
+        unitsAvailable: Double,
+        unitsPending: Double = 0
+    ) {
+        self.status = status
+        self.units = units
+        self.grantID = grantID
+        self.transactionID = transactionID
+        self.productID = productID
+        self.environment = environment
+        self.unitsAvailable = unitsAvailable
+        self.unitsPending = unitsPending
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case status, units, environment
+        case grantID = "grant_id"
+        case transactionID = "transaction_id"
+        case productID = "product_id"
+        case unitsAvailable = "units_available"
+        case unitsPending = "units_pending"
+    }
+}
+
+struct WelcomeCreditsInput: Encodable {
+    let appleIdentityToken: String?
+
+    enum CodingKeys: String, CodingKey {
+        case appleIdentityToken = "apple_identity_token"
+    }
+}
+
+struct AppStoreRedeemInput: Encodable {
+    let signedTransaction: String
+
+    enum CodingKeys: String, CodingKey {
+        case signedTransaction = "signed_transaction"
     }
 }
 
