@@ -2,7 +2,9 @@
 
 All notable public SDK changes are recorded here.
 
-## Unreleased
+## 0.3.0 — 2026-10-01
+
+Swift only. `@weirgate/sdk` stays at 0.2.0 and nothing is published to npm.
 
 ### Swift
 
