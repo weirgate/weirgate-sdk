@@ -138,11 +138,13 @@ public struct Feature: Codable, Identifiable, Hashable, Sendable {
     public let providerPolicy: ProviderPolicy
     public let provider: Provider?
     public let model: String?
+    /// The funding chain; `nil` from a server that predates funding rails.
+    public let funding: Funding?
 
     public var id: String { featureID }
 
     enum CodingKeys: String, CodingKey {
-        case modality, availability, provider, model
+        case modality, availability, provider, model, funding
         case featureID = "feature_id"
         case keyPolicy = "key_policy"
         case displayLabel = "display_label"

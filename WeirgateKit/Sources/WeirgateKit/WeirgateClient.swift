@@ -11,15 +11,40 @@ public actor WeirgateClient {
     private let decoder = JSONDecoder()
     private var sleep: @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     private static let maxRetryAfterSeconds: TimeInterval = 30
+    private var planCredential: (any PlanCredentialSource)?
+    private var fundingPreference: FundingPreference
+    /// Feature funding chains from the last catalog read, so a plan credential goes only to
+    /// features that accept it (the server rejects it elsewhere with `invalid_request`).
+    private var catalogFunding: [String: Feature.Funding] = [:]
+    private var catalogReadAt: Date?
+    private static let catalogRefreshInterval: TimeInterval = 300
+    /// At most this many `next_rail` hops per call.
+    private static let maxRailHops = 2
 
+    /// - Parameter planCredential: the end user's plan connection (usually ``PlanConnect``).
+    ///   When it has a funding token, chat requests to features that accept its provider send
+    ///   it as `X-Weirgate-User-Credential`.
     public init(
         configuration: WeirgateConfiguration,
         tokenProvider: WeirgateTokenProvider? = nil,
-        session: URLSession? = nil
+        session: URLSession? = nil,
+        planCredential: (any PlanCredentialSource)? = nil
     ) {
         self.configuration = configuration
         self.tokenProvider = tokenProvider
         self.session = session ?? Self.ephemeralSession()
+        self.planCredential = planCredential
+        self.fundingPreference = configuration.fundingPreference
+    }
+
+    /// Attach or remove the plan connection used for the `user_plan` rail.
+    public func setPlanCredential(_ source: (any PlanCredentialSource)?) {
+        planCredential = source
+    }
+
+    /// Change the default starting rail for later chat requests.
+    public func setFundingPreference(_ preference: FundingPreference) {
+        fundingPreference = preference
     }
 
     public func health() async throws -> WeirgateResponse<Health> {
@@ -39,10 +64,13 @@ public actor WeirgateClient {
         guard (200..<300).contains(response.statusCode) else {
             throw decodeError(data: data, response: response, metadata: metadata)
         }
-        return .modified(
-            WeirgateResponse(value: try decode(FeatureCatalog.self, data: data, metadata: metadata), metadata: metadata),
-            etag: responseETag
+        let catalog = try decode(FeatureCatalog.self, data: data, metadata: metadata)
+        catalogFunding = Dictionary(
+            catalog.data.compactMap { feature in feature.funding.map { (feature.featureID, $0) } },
+            uniquingKeysWith: { first, _ in first }
         )
+        catalogReadAt = Date()
+        return .modified(WeirgateResponse(value: catalog, metadata: metadata), etag: responseETag)
     }
 
     public func balance() async throws -> WeirgateResponse<Balance> {
@@ -111,19 +139,26 @@ public actor WeirgateClient {
         return try await execute(request)
     }
 
+    /// A chat completion. The feature's funding chain decides who pays; see
+    /// ``FundingPreference`` and ``PlanCredentialSource``. Funding retries happen here:
+    /// `user_credential_expired` refreshes the plan once and repeats the request with the
+    /// same idempotency key, and `funding_rail_refused` with `next_rail` repeats it once on
+    /// that rail. Funding failures throw ``FundingRailError``.
     public func chat(
         featureID: String,
         request input: ChatCompletionRequest,
         options: RequestOptions = .init()
     ) async throws -> WeirgateResponse<ChatCompletion> {
-        var request = try await makeRequest(
-            path: "v1/chat/completions",
-            method: "POST",
-            body: encoder.encode(input),
-            options: options
-        )
-        request.setValue(featureID, forHTTPHeaderField: "X-Feature-Id")
-        return try await execute(request)
+        let body = try encoder.encode(input)
+        return try await funded(featureID: featureID, body: body, options: options) { request, _ in
+            let (data, response) = try await self.performData(request)
+            let metadata = try self.responseMetadata(response, includeFunding: true)
+            guard (200..<300).contains(response.statusCode) else {
+                throw self.decodeError(data: data, response: response, metadata: metadata)
+            }
+            let value = WeirgateResponse(value: try self.decode(ChatCompletion.self, data: data, metadata: metadata), metadata: metadata)
+            return (value, metadata.funding)
+        }
     }
 
     public func telemetry(
@@ -139,19 +174,23 @@ public actor WeirgateClient {
         return try await execute(request)
     }
 
+    /// A streamed chat completion, with the same funding behavior as ``chat(featureID:request:options:)``
+    /// before headers. After the stream starts, a rail refusal arrives as the stream's final
+    /// error: ``chunks`` throws ``FundingRailError`` (no usage, no `[DONE]`). Discard the
+    /// partial answer and call again with ``FundingRailError/retryOptions(from:)``.
     public func streamChat(
         featureID: String,
         request input: ChatCompletionRequest,
         options: RequestOptions = .init()
     ) async throws -> ChatStream {
-        var request = try await makeRequest(
-            path: "v1/chat/completions",
-            method: "POST",
-            body: encoder.encode(StreamingChatRequest(request: input)),
-            options: options
-        )
-        request.setValue(featureID, forHTTPHeaderField: "X-Feature-Id")
+        let body = try encoder.encode(StreamingChatRequest(request: input))
+        return try await funded(featureID: featureID, body: body, options: options) { request, idempotencyKey in
+            let stream = try await self.openStream(request, idempotencyKey: idempotencyKey)
+            return (stream, stream.metadata.funding)
+        }
+    }
 
+    private func openStream(_ request: URLRequest, idempotencyKey: String) async throws -> ChatStream {
         let timing = StreamTiming()
         let bytes: URLSession.AsyncBytes
         let rawResponse: URLResponse
@@ -167,7 +206,7 @@ public actor WeirgateClient {
                 statusCode: -1
             )
         }
-        let metadata = try responseMetadata(response)
+        let metadata = try responseMetadata(response, includeFunding: true)
         guard (200..<300).contains(response.statusCode) else {
             var data = Data()
             for try await byte in bytes { data.append(byte) }
@@ -219,6 +258,17 @@ public actor WeirgateClient {
                     continuation.finish()
                 } catch is CancellationError {
                     continuation.finish(throwing: CancellationError())
+                } catch let frame as SSEContractAccumulator.ErrorFrame {
+                    // A typed refusal after the stream started (x-weirgate-sse mid_stream_error).
+                    let error = WeirgateError(
+                        type: WeirgateErrorType(rawValue: frame.type) ?? .internalError,
+                        statusCode: metadata.statusCode,
+                        requestID: frame.requestID ?? metadata.requestID,
+                        apiVersion: metadata.apiVersion,
+                        serverMessage: frame.message,
+                        detail: frame.detail
+                    )
+                    continuation.finish(throwing: FundingRailError(error, idempotencyKey: idempotencyKey) ?? error)
                 } catch let error as WeirgateSDKError {
                     continuation.finish(throwing: error)
                 } catch {
@@ -237,6 +287,123 @@ public actor WeirgateClient {
             chunks: chunks,
             timing: timing
         )
+    }
+
+    /// Runs one funded data-plane call with the plan header injection and retry rules.
+    private func funded<Value: Sendable>(
+        featureID: String,
+        body: Data,
+        options: RequestOptions,
+        send: (URLRequest, String) async throws -> (Value, FundingOutcome?)
+    ) async throws -> Value {
+        var idempotencyKey = options.idempotencyKey ?? UUID().uuidString
+        var preference = options.funding ?? fundingPreference
+        let source = planCredential
+        var token = try await planToken(featureID: featureID, preference: preference, source: source)
+        var refreshed = false
+        var hops = 0
+        while true {
+            var request = try await makeRequest(
+                path: "v1/chat/completions",
+                method: "POST",
+                body: body,
+                options: RequestOptions(idempotencyKey: idempotencyKey, userProviderKey: options.userProviderKey)
+            )
+            request.setValue(featureID, forHTTPHeaderField: "X-Feature-Id")
+            if let header = fundingHeader(featureID: featureID, preference: preference, token: token, source: source) {
+                request.setValue(header, forHTTPHeaderField: "X-Weirgate-Funding")
+            }
+            if let token { request.setValue(token, forHTTPHeaderField: "X-Weirgate-User-Credential") }
+            do {
+                let (value, outcome) = try await send(request, idempotencyKey)
+                if let source, token != nil, let fallback = outcome?.fallback,
+                   fallback.disable, fallback.refusedRail == .userPlan {
+                    await source.requireReconnect(.railDisabled(reason: fallback.reason))
+                }
+                return value
+            } catch let error as WeirgateError {
+                switch error.type {
+                case .userCredentialExpired:
+                    guard let source, let sent = token else {
+                        throw FundingRailError(error, idempotencyKey: idempotencyKey) ?? error
+                    }
+                    if refreshed {
+                        let reason = PlanReconnectReason.credentialRejected(providerCode: error.stringDetail("provider_code"))
+                        await source.requireReconnect(reason)
+                        throw FundingRailError(code: .reconnectRequired(reason), underlying: error, idempotencyKey: idempotencyKey)
+                    }
+                    refreshed = true
+                    switch try await source.refreshAccessToken(rejected: sent) {
+                    case .refreshed(let fresh):
+                        token = fresh
+                    case .reconnectRequired(let reason):
+                        throw FundingRailError(code: .reconnectRequired(reason), underlying: error, idempotencyKey: idempotencyKey)
+                    }
+                case .fundingRailRefused:
+                    guard let next = error.stringDetail("next_rail").map(FundingRail.init(rawValue:)),
+                          hops < Self.maxRailHops else {
+                        throw FundingRailError(error, idempotencyKey: idempotencyKey) ?? error
+                    }
+                    hops += 1
+                    idempotencyKey = "\(idempotencyKey):rail:\(next.rawValue)"
+                    preference = .startAt(next)
+                    if next != .userPlan { token = nil }
+                case .fundingRailUnavailable:
+                    throw FundingRailError(error, idempotencyKey: idempotencyKey) ?? error
+                default:
+                    throw error
+                }
+            }
+        }
+    }
+
+    /// The plan token to send, or `nil` when the preference starts past the plan rail, the
+    /// feature does not accept the source's provider, or the plan is not funding.
+    private func planToken(
+        featureID: String,
+        preference: FundingPreference,
+        source: (any PlanCredentialSource)?
+    ) async throws -> String? {
+        guard let source else { return nil }
+        if case .startAt(let rail, let provider) = preference {
+            guard rail == .userPlan, provider == nil || provider == source.provider else { return nil }
+        }
+        let accepts = { (funding: Feature.Funding?) in
+            funding.map { $0.order.contains(.userPlan) && $0.planProviders.contains(source.provider) } ?? false
+        }
+        if let known = catalogFunding[featureID] {
+            return accepts(known) ? try await source.fundingAccessToken() : nil
+        }
+        // Read the catalog only when there is a token to send.
+        guard let token = try await source.fundingAccessToken() else { return nil }
+        return accepts(await featureFunding(featureID)) ? token : nil
+    }
+
+    private func fundingHeader(
+        featureID: String,
+        preference: FundingPreference,
+        token: String?,
+        source: (any PlanCredentialSource)?
+    ) -> String? {
+        guard token != nil, let source else { return preference.headerValue }
+        switch preference {
+        case .startAt:
+            return FundingPreference.startAt(.userPlan, provider: source.provider).headerValue
+        case .serverChain:
+            // The server defaults to the feature's first plan provider; name ours otherwise.
+            guard catalogFunding[featureID]?.planProviders.first != source.provider else { return nil }
+            return FundingPreference.startAt(.userPlan, provider: source.provider).headerValue
+        }
+    }
+
+    /// The feature's chain from the catalog, reading the catalog when this feature is unknown
+    /// and the last read is stale. A failed read means "no plan" rather than a failed call.
+    private func featureFunding(_ featureID: String) async -> Feature.Funding? {
+        if let known = catalogFunding[featureID] { return known }
+        if let readAt = catalogReadAt, Date().timeIntervalSince(readAt) < Self.catalogRefreshInterval { return nil }
+        catalogReadAt = Date()
+        _ = try? await features()
+        return catalogFunding[featureID]
     }
 
     private func execute<Value: Decodable & Sendable>(_ request: URLRequest) async throws -> WeirgateResponse<Value> {
@@ -299,7 +466,7 @@ public actor WeirgateClient {
         return request
     }
 
-    private func responseMetadata(_ response: HTTPURLResponse) throws -> ResponseMetadata {
+    private func responseMetadata(_ response: HTTPURLResponse, includeFunding: Bool = false) throws -> ResponseMetadata {
         guard let requestID = response.value(forHTTPHeaderField: "X-Weirgate-Request-Id"),
               let apiVersion = response.value(forHTTPHeaderField: "Weirgate-Api-Version") else {
             throw WeirgateSDKError.invalidResponse(
@@ -308,7 +475,15 @@ public actor WeirgateClient {
                 statusCode: response.statusCode
             )
         }
-        return ResponseMetadata(requestID: requestID, apiVersion: apiVersion, statusCode: response.statusCode)
+        return ResponseMetadata(
+            requestID: requestID,
+            apiVersion: apiVersion,
+            statusCode: response.statusCode,
+            funding: includeFunding ? FundingOutcome(
+                railHeader: response.value(forHTTPHeaderField: "X-Weirgate-Funding-Rail"),
+                fallbackHeader: response.value(forHTTPHeaderField: "X-Weirgate-Funding-Fallback")
+            ) : nil
+        )
     }
 
     private func decode<Value: Decodable>(

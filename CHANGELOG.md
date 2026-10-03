@@ -2,6 +2,67 @@
 
 All notable public SDK changes are recorded here.
 
+## Unreleased
+
+Funding rails v2, Phase 2: let an app offer "use your ChatGPT plan" on top of the funding
+chain the server enforces (weirgate#124, spec provenance weirgate `25282cf`). Nothing here
+has run against a real plan: OpenAI has no plan-usage sandbox before partner approval, so
+tests replay Weirgate responses recorded from the server (`fixtures/funding-rails/`).
+
+### Swift
+
+- `PlanConnect` (iOS 17+, macOS 14+) for `openai_chatgpt`: OpenID Connect with PKCE through
+  `ASWebAuthenticationSession` (`WebAuthenticationSessionAuthorizer`), client ID and redirect
+  URI from the app's partner registration, scopes `openid profile email offline_access
+  chatgpt.tokens.use.direct`, tokens in the Keychain (`KeychainPlanTokenStore`, or any
+  `PlanTokenStore`), the rotated refresh token stored on every refresh, proactive refresh
+  under five minutes, serialized refreshes, a stable `urn:uuid:` host ID sent as
+  `ext_agent_host_id`. Without `chatgpt.tokens.use.direct` the sign-in is kept for identity
+  and `status()` reports `.connected(funding: false)`; `enablePlanUsage()` repeats with
+  `prompt=consent`. `statusUpdates()` reports `.reconnectRequired` after a refused refresh.
+- `WeirgateClient(…, planCredential:)` and `WeirgateConfiguration.fundingPreference`
+  (`.serverChain` default, `.startAt(rail)`), per-call `RequestOptions(funding:)`. Chat and
+  streaming send `X-Weirgate-User-Credential` only to features whose catalog entry accepts
+  the provider, and `ResponseMetadata.funding` reports `X-Weirgate-Funding-Rail` and
+  `X-Weirgate-Funding-Fallback`.
+- Retry rules: `user_credential_expired` refreshes once and repeats with the same
+  idempotency key; a second rejection or a refused refresh clears the tokens and throws
+  `FundingRailError(.reconnectRequired)`; `funding_rail_refused` with `next_rail` repeats on
+  that rail (key `<key>:rail:<rail>`, at most two hops); a `disable` fallback clears the plan.
+- `FundingRailError` types `funding_rail_refused`, `funding_rail_unavailable`, and
+  `user_credential_expired`, before headers and from the stream's final `data: {"error"}`
+  frame, with `retryOptions(from:)` for restarting a stream on `next_rail`.
+- Catalog: `Feature.funding` (`order`, `planProviders`), `acceptsPlan(_:)`,
+  `FeatureCatalog.features(acceptingPlan:)` and `offersPlan(_:)`. `FundingRail` and
+  `PlanProvider` are open-ended.
+
+### TypeScript
+
+- `planCredential` (`PlanCredentialSource`) and `fundingPreference` options, per-call
+  `funding`, the same header injection and retry rules for `chat`, `streamChat`, and
+  `embedding`, and `funding` on results and streams.
+- `FundingRailError` with `FundingRailRefusedError`, `FundingRailUnavailableError`,
+  `UserCredentialExpiredError`, plus `PlanReconnectRequiredError`. The stream's final error
+  frame throws the typed error.
+- Catalog helpers `acceptsPlan`, `featuresAcceptingPlan`, `offersPlan`, and
+  `parseFundingHeaders`.
+- Browser sign-in is a README recipe, not a built-in: OpenAI forbids tokens in browser
+  storage, so the OAuth half runs on the app's server.
+- Generated types move to weirgate `25282cf`.
+
+### Type changes (additive, but can break exhaustive matching)
+
+- Swift `WeirgateErrorType` gains `fundingRailRefused`, `fundingRailUnavailable`, and
+  `userCredentialExpired`; a `switch` without `default` must handle them.
+- TypeScript `ErrorType` and `ERROR_TYPES` gain the three funding types, and
+  `ERROR_TYPES` gains the six `purchase_*` types it lacked (0.2.0 reported those errors as
+  `internal`).
+- TypeScript `FeatureCatalogEntry` gains the required `funding` object (server contract);
+  code that builds catalog entries by hand must add it.
+- New optional fields: Swift `Feature.funding`, `ResponseMetadata.funding`,
+  `RequestOptions.funding`, `WeirgateConfiguration.fundingPreference`; TypeScript
+  `WeirgateResult.funding`, `ChatStream.funding`, `RequestOptions.funding`.
+
 ## 0.3.0 — 2026-10-01
 
 Swift only. `@weirgate/sdk` stays at 0.2.0 and nothing is published to npm.

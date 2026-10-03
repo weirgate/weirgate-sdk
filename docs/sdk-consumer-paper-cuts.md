@@ -24,3 +24,16 @@ change the frozen contract in this slice.
 6. Provider identifiers use `google` and `xai`, while Denali's established user-facing
    names and feature IDs use Gemini and Grok. SDK consumers still need a presentation
    mapping without treating provider/model labels as capability identity.
+
+## Funding rails (2026-10-03, weirgate `25282cf`)
+
+7. A client may send `X-Weirgate-User-Credential` only to features whose chain contains
+   `user_plan` (otherwise `invalid_request`), so SDKs must read the catalog before the first
+   plan-funded call. Both SDKs cache `funding` from `GET /v1/features` and read it once when
+   a feature is unknown.
+8. `detail.next_rail` is always `null` in the 25282cf server, including the mid-stream
+   error frame of a chain that has a later rail. The SDKs implement the documented retry,
+   but it never fires until the server fills `next_rail` for mid-stream refusals.
+9. Retrying with the same idempotency key after `user_credential_expired`, as the contract
+   says, reuses the refunded reservation: the retried request is served, but no usage event
+   is written and it is not metered. Found by recording against the server.

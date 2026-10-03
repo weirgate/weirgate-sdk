@@ -32,7 +32,7 @@ export interface paths {
         put?: never;
         /**
          * Create a server-routed chat completion
-         * @description OpenAI-compatible request/response envelope. Client-supplied model and token ceilings are ignored; X-Feature-Id owns routing and output limits. When stream is true the response is SSE and follows x-weirgate-sse.
+         * @description OpenAI-compatible request/response envelope. Client-supplied model and token ceilings are ignored; X-Feature-Id owns routing and output limits. When stream is true the response is SSE and follows x-weirgate-sse. The feature's funding chain (`funding.order`, or the `key_policy` shorthand) decides who pays: the first rail whose credential or balance is present funds the request, a rail refusal before the stream starts falls through to the next rail per `on_refusal` inside this call, and the response names the rail in X-Weirgate-Funding-Rail. User-funded rails (user_key, user_plan) settle the units the feature configures for them (default 0) and attribute no provider cost to the app owner; the platform still meters them.
          */
         post: operations["createChatCompletion"];
         delete?: never;
@@ -129,6 +129,46 @@ export interface paths {
          * @description Grants the app's configured welcome_grant.units once per verified identity, per app, forever, keyed by HMAC(tenant secret, "<provider>:<sub>"). With require=sign_in_with_apple the identity comes from apple_identity_token (verified against Apple's JWKS: issuer https://appleid.apple.com, audience in the app's apple_client_ids, not expired) or, for auth.mode=firebase, from the verified ID token's linked apple.com identity. Outcomes are typed statuses: granted (a replay by the same user returns granted with idempotent=true), already_claimed (the identity was used by another app user, including a deleted account, or this user already received a welcome grant), and welcome_requires_sign_in (no verified identity was supplied). An invalid or expired Apple token is invalid_request with detail.reason=apple_identity_token_invalid. If Apple's keys cannot be fetched the request fails with retryable provider_unavailable (detail.reason=apple_jwks_unavailable) and a Retry-After header; it never grants or reports already_claimed. Keep sign-in optional in the app (App Review 5.1.1(v)).
          */
         post: operations["claimWelcomeGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/purchases/apple": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Redeem a StoreKit 2 consumable purchase for credits
+         * @description Body is the StoreKit 2 VerificationResult.jwsRepresentation of one transaction. Weirgate checks Apple's signature (x5c chain to the pinned Apple Root CA - G3, ES256, Apple marker OIDs, certificate dates as of the record's signedDate; no OCSP), then bundle ID, environment (Apple sandbox is recorded as test, production as live; each must be listed in payments.apple.environments), that the product is mapped as a consumable and the record's type is Consumable, that the transaction is not revoked, and that its appAccountToken equals the caller's app_account_token (from GET /v1/balance). A record without appAccountToken is credited to the caller unless payments.apple.require_app_account_token is set. The grant (units = product units x quantity, source apple:<productId>, idempotency key apple:<transactionId>) is written once per transaction, whether it arrives here, from an App Store notification, or both. granted means this call credited the caller; already_granted means the transaction was credited earlier (units is what the caller received from it; 0 when another user redeemed it first). Call Transaction.finish() only after granted or already_granted. A transaction the App Store refunded returns purchase_revoked; finishing it is safe. Other purchase_* errors are permanent for that record.
+         */
+        post: operations["redeemAppleTransaction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/apple/notifications/{appId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * App Store Server Notifications v2 endpoint for one app
+         * @description Paste https://api.weirgate.com/v1/apple/notifications/<appId> into App Store Connect as both the production and sandbox Server Notifications URL (Version 2). Authentication is Apple's signature on signedPayload and on the inner signedTransactionInfo, plus the app's bundle ID, App Apple ID (production), and an enabled environment. Any failure, including an unknown app, returns purchase_invalid_signature with no detail. Duplicate notificationUUIDs are acknowledged without effect. ONE_TIME_CHARGE grants the consumable to the user whose app_account_token it carries (same once-per-transaction rule as the redeem route); REFUND reverses the grant, and the balance may go below zero (a refund seen before any redeem is recorded so the purchase can't be redeemed later); REFUND_REVERSED grants it again (key apple-rr:<transactionId>); CONSUMPTION_REQUEST sends a consumption report only when payments.apple.send_consumption_info is on and App Store Server API credentials are stored; TEST is recorded for the doctor; other types are acknowledged and recorded.
+         */
+        post: operations["receiveAppleNotification"];
         delete?: never;
         options?: never;
         head?: never;
@@ -278,8 +318,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Idempotently create the approved Stripe test-mode catalog */
-        post: operations["setupStripeTestCatalog"];
+        /**
+         * Idempotently create the approved Stripe catalog in the deployment's Stripe mode
+         * @description Runs in the mode set by STRIPE_MODE, with a secret key that must match it. Each run is recorded in the platform billing audit log with its mode.
+         */
+        post: operations["setupStripeCatalog"];
         delete?: never;
         options?: never;
         head?: never;
@@ -992,11 +1035,61 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List active users for an app */
+        /**
+         * List active users for an app
+         * @description Each row reports unlimited and unlimited_until with the same meaning as GET /v1/balance and the single-user read: an assignment whose end has passed is not reported as unlimited.
+         */
         get: operations["listUsers"];
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/apps/{appId}/purchases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List verified store purchases for an app, newest first
+         * @description Requires the credits or usage tool group. environment filters by test (Apple sandbox) or live (production); a test-environment key sees only test purchases. external_id narrows to one user. Apple's raw signed claims are not returned.
+         */
+        get: operations["listPurchases"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/apps/{appId}/payments/apple/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                appId: components["parameters"]["AppIdPath"];
+            };
+            cookie?: never;
+        };
+        /** Read App Store Server API credential metadata (never the key) */
+        get: operations["getAppleServerApiCredentials"];
+        /**
+         * Store App Store Server API credentials for consumption reports
+         * @description Optional. Needed only to answer CONSUMPTION_REQUEST notifications (payments.apple.send_consumption_info); checking purchases and notifications never uses them. Requires apply scope, the setup tool group, and a live grant; a Clerk developer session needs a recent second factor. private_key is the .p8 file from App Store Connect (In-App Purchase key); it is stored only as AES-GCM ciphertext bound to the tenant, app, and provider, and is never returned.
+         */
+        put: operations["putAppleServerApiCredentials"];
+        post?: never;
+        /**
+         * Delete the stored App Store Server API credentials
+         * @description A Clerk developer session requires a recent second factor.
+         */
+        delete: operations["deleteAppleServerApiCredentials"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1165,7 +1258,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Run non-billable auth, provider, or webhook probes */
+        /**
+         * Run non-billable auth, provider, webhook, or payments probes
+         * @description payments reads only stored state: consumable products mapped, the last App Store notification received per enabled environment (with the URL to paste into App Store Connect), and App Store Server API credentials when consumption reports are on.
+         */
         post: operations["runDoctor"];
         delete?: never;
         options?: never;
@@ -1496,9 +1592,9 @@ export interface components {
             /** Format: uri */
             invoice_pdf: string | null;
         };
-        StripeTestCatalog: {
-            /** @constant */
-            mode: "test";
+        StripeCatalog: {
+            /** @enum {string} */
+            mode: "test" | "live";
             version: string;
             products: components["schemas"]["GenericObject"];
             prices: components["schemas"]["GenericObject"];
@@ -1534,8 +1630,86 @@ export interface components {
         FeatureId: string;
         /** @enum {string} */
         Provider: "openrouter" | "openai" | "anthropic" | "google" | "xai";
+        /**
+         * @description Who bears the provider cost of a request. Documented as open-ended; new rails may be added.
+         * @enum {string}
+         */
+        FundingRail: "user_plan" | "user_key" | "developer";
+        /**
+         * @description Plan (subscription) providers the user_plan rail can forward to. Documented as open-ended.
+         * @enum {string}
+         */
+        PlanProvider: "openai_chatgpt";
+        /** @description Per-feature funding chain. There is no platform default order: a funded feature needs funding.order or the key_policy shorthand (developer → [developer]; user → [user_plan, user_key]; user_or_developer → [user_plan, user_key, developer]). When both are present they must agree. Reads always return the resolved chain. */
+        FundingConfig: {
+            order?: components["schemas"]["FundingRail"][];
+            user_plan?: {
+                /**
+                 * @default [
+                 *       "openai_chatgpt"
+                 *     ]
+                 */
+                providers: components["schemas"]["PlanProvider"][];
+                /** @description Model slug in the user's plan catalog; falls back to the catalog's first listed model. */
+                model?: string;
+                /**
+                 * @description Units charged when the user's plan pays.
+                 * @default 0
+                 */
+                units: number;
+            };
+            user_key?: {
+                /**
+                 * @description Units charged when the user's own provider key pays.
+                 * @default 0
+                 */
+                units: number;
+            };
+            developer?: {
+                /** @description Units charged when the developer pays; defaults to unit_cost. */
+                units?: number;
+            };
+            /** @description What happens when a rail refuses. Defaults shown; `stop` returns the typed refusal to the client. */
+            on_refusal?: {
+                /**
+                 * @default next
+                 * @enum {string}
+                 */
+                plan_limit_exceeded: "next" | "stop";
+                /**
+                 * @default next_and_disable
+                 * @enum {string}
+                 */
+                user_not_eligible: "next" | "next_and_disable" | "stop";
+                /**
+                 * @default retry_then_next
+                 * @enum {string}
+                 */
+                usage_unavailable: "retry_then_next" | "next" | "stop";
+                /**
+                 * @default refresh_once
+                 * @enum {string}
+                 */
+                credential_expired: "refresh_once" | "next" | "stop";
+                /**
+                 * @default next
+                 * @enum {string}
+                 */
+                unsupported_capability: "next" | "stop";
+                /**
+                 * @default stop
+                 * @enum {string}
+                 */
+                no_balance: "stop" | "next";
+            };
+            /**
+             * @description How the chain was declared. `default` is the legacy developer-only policy of a feature with neither field.
+             * @enum {string}
+             */
+            readonly source?: "order" | "key_policy" | "default";
+        };
         /** @enum {string} */
-        ErrorType: "invalid_request" | "invalid_token" | "user_provider_key_required" | "user_provider_key_invalid" | "insufficient_scope" | "out_of_allowance" | "insufficient_balance" | "abuse_blocked" | "feature_disabled" | "feature_not_found" | "resource_not_found" | "resource_conflict" | "provider_policy_blocked" | "output_contract_unsupported" | "output_contract_violation" | "proposal_stale" | "rate_limited" | "telemetry_request_unavailable" | "provider_unavailable" | "internal";
+        ErrorType: "invalid_request" | "invalid_token" | "user_provider_key_required" | "user_provider_key_invalid" | "insufficient_scope" | "out_of_allowance" | "insufficient_balance" | "abuse_blocked" | "feature_disabled" | "feature_not_found" | "resource_not_found" | "resource_conflict" | "provider_policy_blocked" | "output_contract_unsupported" | "output_contract_violation" | "proposal_stale" | "rate_limited" | "telemetry_request_unavailable" | "provider_unavailable" | "purchase_invalid_signature" | "purchase_wrong_app" | "purchase_environment_mismatch" | "purchase_unknown_product" | "purchase_revoked" | "purchase_account_mismatch" | "funding_rail_refused" | "funding_rail_unavailable" | "user_credential_expired" | "internal";
         ErrorEnvelope: {
             error: {
                 type: components["schemas"]["ErrorType"];
@@ -1643,8 +1817,17 @@ export interface components {
             feature_id: components["schemas"]["FeatureId"];
             /** @enum {string} */
             modality: "chat" | "embedding" | "image" | "audio";
-            /** @enum {string} */
+            /**
+             * @description The shorthand equivalent of funding.order, kept for clients that predate funding rails.
+             * @enum {string}
+             */
             key_policy: "developer" | "user" | "user_or_developer";
+            /** @description The feature's funding chain, so the app knows which credentials it may offer the user to connect. */
+            funding: {
+                order: components["schemas"]["FundingRail"][];
+                /** @description Plan providers the user_plan rail accepts; empty when the chain has no user_plan rail. */
+                plan_providers: components["schemas"]["PlanProvider"][];
+            };
             display_label: string;
             availability: {
                 available: boolean;
@@ -1677,6 +1860,11 @@ export interface components {
             units_available: number;
             units_pending: number;
             tier: string;
+            /**
+             * Format: uuid
+             * @description Stable per-user UUID. Pass it to StoreKit 2 as the appAccountToken purchase option so Weirgate can tie each purchase to this user.
+             */
+            app_account_token: string;
             /** @description True while the active tier is unlimited; metered requests then skip the balance check and debit zero units. */
             unlimited: boolean;
             /**
@@ -1700,6 +1888,81 @@ export interface components {
             idempotent: boolean;
             units_available: number;
             units_pending: number;
+        };
+        AppleRedeemInput: {
+            /** @description StoreKit 2 VerificationResult<Transaction>.jwsRepresentation. */
+            signed_transaction: string;
+        };
+        AppleRedeemResult: {
+            /** @enum {string} */
+            status: "granted" | "already_granted";
+            /** @description Units the caller received from this transaction; 0 when another user redeemed it first. */
+            units: number;
+            /** @description Present unless another user redeemed the transaction first. */
+            grant_id?: string;
+            transaction_id: string;
+            product_id: string;
+            /**
+             * @description Apple sandbox is test; production is live.
+             * @enum {string}
+             */
+            environment: "test" | "live";
+            units_available: number;
+            units_pending: number;
+        };
+        AppleNotificationInput: {
+            /** @description App Store Server Notifications v2 signed payload (JWS). */
+            signedPayload: string;
+        };
+        AppleNotificationAck: {
+            /** @enum {string} */
+            status: "processed" | "duplicate";
+            /** @description What processing did (e.g. granted */
+            outcome?: string;
+        };
+        PaymentTransaction: {
+            id: string;
+            appId: components["schemas"]["AppId"];
+            /** @description Null for a purchase first seen in a refund notification. */
+            userId: string | null;
+            /** @description Null when unowned or the user was anonymized. */
+            externalId: string | null;
+            /** @enum {string} */
+            provider: "apple";
+            providerTransactionId: string;
+            originalTransactionId: string | null;
+            productId: string;
+            units: number;
+            /** @enum {string} */
+            environment: "test" | "live";
+            /** @enum {string} */
+            status: "granted" | "refunded" | "refund_reversed";
+            /** @description The grant currently tied to the purchase. */
+            grantId: string | null;
+            refundCount: number;
+            /** @description Unix epoch milliseconds */
+            createdAt: number;
+            /** @description Unix epoch milliseconds */
+            updatedAt: number;
+        };
+        AppleServerApiCredentialsInput: {
+            /** @description App Store Connect issuer ID (Users and Access → Integrations → In-App Purchase). */
+            issuer_id: string;
+            key_id: string;
+            /** @description Contents of the .p8 file (PEM PKCS#8 P-256 key). Write-only. */
+            private_key: string;
+        };
+        AppleServerApiCredentials: {
+            app_id: components["schemas"]["AppId"];
+            /** @enum {string} */
+            provider: "apple";
+            issuer_id: string;
+            key_id: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            deleted?: boolean;
         };
         ClientTelemetryInput: {
             request_id: components["schemas"]["RequestId"];
@@ -1753,10 +2016,11 @@ export interface components {
             /** @default true */
             enabled: boolean;
             /**
-             * @default developer
+             * @description Shorthand for funding.order (see FundingConfig). Absent with no funding block keeps the legacy developer-only chain. Reads always return it.
              * @enum {string}
              */
-            key_policy: "developer" | "user" | "user_or_developer";
+            key_policy?: "developer" | "user" | "user_or_developer";
+            funding?: components["schemas"]["FundingConfig"];
             /** @default false */
             provider_visible: boolean;
             /** @enum {string} */
@@ -1810,6 +2074,61 @@ export interface components {
             };
             /** @description Accepted Sign in with Apple audiences (bundle ID or Services ID). Required for require=sign_in_with_apple unless auth.mode is firebase. */
             apple_client_ids?: string[];
+            /** @description Plan providers this app is registered with. `status` is set by Weirgate ops after the provider confirms the partner client; a tenant proposal that sets `approved` is rejected with insufficient_scope. Until approved, the user_plan rail serves mock (sandbox) features only and live requests return funding_rail_unavailable. */
+            funding_providers?: {
+                openai_chatgpt?: {
+                    /**
+                     * @default pending_approval
+                     * @enum {string}
+                     */
+                    status: "pending_approval" | "approved";
+                    client_id?: string;
+                    redirect_uris?: string[];
+                };
+            };
+            payments?: {
+                /** @description Hosted App Store purchase checks. Weirgate verifies purchases and grants credits; Apple charges the user and pays the developer. */
+                apple?: {
+                    bundle_id: string;
+                    /** @description App Store app ID. Required when environments includes production. */
+                    app_apple_id?: number;
+                    /**
+                     * @description Accepted Apple environments. sandbox (TestFlight, App Review, sandbox testers) is recorded as test; production as live.
+                     * @default [
+                     *       "sandbox",
+                     *       "production"
+                     *     ]
+                     */
+                    environments: ("sandbox" | "production")[];
+                    /** @description App Store product ID → what one unit grants. */
+                    products: {
+                        [key: string]: {
+                            /**
+                             * @default consumable
+                             * @enum {string}
+                             */
+                            kind: "consumable";
+                            /** @description Credits per unit purchased; a transaction's quantity multiplies it. */
+                            units: number;
+                        };
+                    };
+                    /**
+                     * @description Refuse purchase records without appAccountToken instead of crediting the caller.
+                     * @default false
+                     */
+                    require_app_account_token: boolean;
+                    /**
+                     * @description Answer CONSUMPTION_REQUEST notifications through the App Store Server API (needs stored credentials). Turning it on asserts the app has the customer's consent to share consumption data with Apple.
+                     * @default false
+                     */
+                    send_consumption_info: boolean;
+                    /**
+                     * @description Optional refund preference sent in consumption reports.
+                     * @enum {string}
+                     */
+                    refund_preference?: "decline" | "grant_full" | "grant_prorated";
+                };
+            };
         };
         TenantConfig: {
             tenant_id: components["schemas"]["TenantId"];
@@ -2100,7 +2419,7 @@ export interface components {
             };
         };
         /** @enum {string} */
-        WebhookEventType: "allowance.low" | "allowance.exhausted" | "rule.breached" | "provider_policy.changed" | "grant.created" | "grant.reversed" | "credits.adjusted" | "tier.expiring" | "tier.expired";
+        WebhookEventType: "allowance.low" | "allowance.exhausted" | "rule.breached" | "provider_policy.changed" | "grant.created" | "grant.reversed" | "credits.adjusted" | "tier.expiring" | "tier.expired" | "purchase.granted" | "purchase.refunded";
         WebhookEvent: {
             id: string;
             type: components["schemas"]["WebhookEventType"];
@@ -2232,6 +2551,7 @@ export interface components {
             requests: number;
             developer_requests: number;
             user_key_requests: number;
+            user_plan_requests: number;
             units: number;
             prompt_tokens: number;
             completion_tokens: number;
@@ -2353,6 +2673,36 @@ export interface components {
             tierExpiresAt: number | null;
             /** @description End of the pending tier assignment (Unix epoch milliseconds). */
             pendingTierExpiresAt: number | null;
+            /**
+             * Format: uuid
+             * @description The user's StoreKit appAccountToken (same value as GET /v1/balance app_account_token).
+             */
+            appAccountToken: string;
+        };
+        /** @description UserRow plus the user's unlimited state, matching GET /v1/balance. */
+        UserListRow: {
+            id: string;
+            appId: components["schemas"]["AppId"];
+            externalId: string | null;
+            tier: string;
+            pendingTier: string | null;
+            pendingTierEffectivePeriod: string | null;
+            anonymous: boolean;
+            /** @description Unix epoch milliseconds */
+            anonymizedAt: number | null;
+            /** @description End of the active tier assignment (Unix epoch milliseconds). */
+            tierExpiresAt: number | null;
+            /** @description End of the pending tier assignment (Unix epoch milliseconds). */
+            pendingTierExpiresAt: number | null;
+            /** Format: uuid */
+            appAccountToken: string;
+            /** @description True while the active tier is unlimited and its assignment has not ended. */
+            unlimited: boolean;
+            /**
+             * Format: date-time
+             * @description End of the unlimited assignment; null when not unlimited or open-ended.
+             */
+            unlimited_until: string | null;
         };
         /** @description Platform reads return tenants plus a revision map; tenant reads return one visible tenant plus revision. */
         ConfigRead: {
@@ -2867,7 +3217,7 @@ export interface components {
             };
             content: {
                 "application/json": {
-                    data: components["schemas"]["UserRow"][];
+                    data: components["schemas"]["UserListRow"][];
                     pagination: {
                         limit: number;
                         returned: number;
@@ -2875,6 +3225,47 @@ export interface components {
                         next_cursor: string | null;
                     };
                 };
+            };
+        };
+        /** @description Verified store purchases, newest first */
+        PurchaseListOk: {
+            headers: {
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: components["schemas"]["PaymentTransaction"][];
+                    pagination: {
+                        limit: number;
+                        returned: number;
+                        truncated: boolean;
+                        next_cursor: string | null;
+                    };
+                };
+            };
+        };
+        /** @description App Store Server API credential metadata (the key is never returned) */
+        AppleServerApiCredentialsOk: {
+            headers: {
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["AppleServerApiCredentials"];
+            };
+        };
+        /** @description Deleted credential metadata (deleted is true) */
+        AppleServerApiCredentialsDeleted: {
+            headers: {
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["AppleServerApiCredentials"];
             };
         };
         /** @description Existing user, balance, grants, adjustments, tier-change timeline, and recent usage */
@@ -2909,6 +3300,8 @@ export interface components {
                     balance: components["schemas"]["StoreBalance"];
                     grants: components["schemas"]["GrantRow"][];
                     adjustments: components["schemas"]["CreditAdjustmentRow"][];
+                    /** @description Store purchases tied to the user, including Apple's signed claims as held. */
+                    purchases?: components["schemas"]["GenericObject"][];
                     usage: components["schemas"]["GenericObject"][];
                     client_telemetry: components["schemas"]["GenericObject"][];
                     /** Format: date-time */
@@ -3241,7 +3634,19 @@ export interface components {
             };
             content?: never;
         };
-        /** @description abuse_blocked, feature_disabled, or provider_policy_blocked */
+        /** @description insufficient_scope, or feature_disabled with detail.reason=checkout_disabled while new Checkout is switched off */
+        ForbiddenCheckout: {
+            headers: {
+                "X-Weirgate-Error-Type": components["headers"]["ErrorType"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorEnvelope"];
+            };
+        };
+        /** @description abuse_blocked, feature_disabled, provider_policy_blocked, or funding_rail_unavailable (the user_plan rail is not approved for this app outside sandbox, or the feature does not accept the requested plan provider) */
         ForbiddenDataPlane: {
             headers: {
                 "X-Weirgate-Error-Type": components["headers"]["ErrorType"];
@@ -3409,6 +3814,96 @@ export interface components {
             };
             content?: never;
         };
+        ErrorPurchaseInvalidSignature: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
+        ErrorPurchaseWrongApp: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
+        ErrorPurchaseEnvironmentMismatch: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
+        ErrorPurchaseUnknownProduct: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
+        ErrorPurchaseRevoked: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
+        ErrorPurchaseAccountMismatch: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
+        ErrorFundingRailRefused: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
+        ErrorFundingRailUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
+        ErrorUserCredentialExpired: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
+        /** @description invalid_token (end-user bearer), or user_credential_expired (the per-request plan credential was rejected; refresh it and retry once) */
+        UnauthorizedDataPlane: {
+            headers: {
+                "X-Weirgate-Error-Type": components["headers"]["ErrorType"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorEnvelope"];
+            };
+        };
+        /** @description out_of_allowance (the developer rail has no balance), or funding_rail_refused (detail.rail, detail.reason, detail.next_rail: a user-funded rail cannot pay and the chain's on_refusal rule stopped or no later rail could fund) */
+        PaymentRequiredDataPlane: {
+            headers: {
+                "X-Weirgate-Error-Type": components["headers"]["ErrorType"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorEnvelope"];
+            };
+        };
+        /** @description purchase_wrong_app, purchase_environment_mismatch, or purchase_unknown_product (detail.reason says which check failed) */
+        PurchaseRejected: {
+            headers: {
+                "X-Weirgate-Error-Type": components["headers"]["ErrorType"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorEnvelope"];
+            };
+        };
         ErrorInternal: {
             headers: {
                 [name: string]: unknown;
@@ -3430,6 +3925,8 @@ export interface components {
     };
     parameters: {
         XAppId: components["schemas"]["AppId"];
+        /** @description Names the rail to start the feature's funding chain from, optionally with the plan provider: `user_plan; provider=openai_chatgpt`, `user_key`, or `developer`. Absent means walk the chain from its first rail. Later rails still apply per on_refusal. */
+        XWeirgateFunding: string;
         XFeatureId: components["schemas"]["FeatureId"];
         /** @description Canonical idempotency carrier for retried mutations. */
         XIdempotencyKey: string;
@@ -3536,7 +4033,7 @@ export interface components {
         DoctorBody: {
             content: {
                 "application/json": {
-                    checks: ("auth" | "provider" | "webhook")[];
+                    checks: ("auth" | "provider" | "webhook" | "payments")[];
                 };
             };
         };
@@ -3571,6 +4068,10 @@ export interface components {
         RequestId: components["schemas"]["RequestId"];
         /** @description Available units after pending reservations. */
         CreditsRemaining: number;
+        /** @description The rail that paid this request, e.g. `developer`, `user_key`, or `user_plan; provider=openai_chatgpt`. */
+        FundingRail: string;
+        /** @description Present when a rail refused and a later rail funded the request inside this call: `<refused rail>; reason=<refusal reason>[; disable]`. `disable` means the SDK should mark that rail unavailable until the user re-consents (on_refusal next_and_disable). */
+        FundingFallback: string;
         /** @description Stable enumerable error discriminator; never parse message strings. */
         ErrorType: components["schemas"]["ErrorType"];
     };
@@ -3619,6 +4120,8 @@ export interface operations {
                 "X-Feature-Id": components["parameters"]["XFeatureId"];
                 /** @description Canonical idempotency carrier for retried mutations. */
                 "X-Idempotency-Key"?: components["parameters"]["XIdempotencyKey"];
+                /** @description Names the rail to start the feature's funding chain from, optionally with the plan provider: `user_plan; provider=openai_chatgpt`, `user_key`, or `developer`. Absent means walk the chain from its first rail. Later rails still apply per on_refusal. */
+                "X-Weirgate-Funding"?: components["parameters"]["XWeirgateFunding"];
             };
             path?: never;
             cookie?: never;
@@ -3635,6 +4138,8 @@ export interface operations {
                     "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
                     "X-Weirgate-Request-Id": components["headers"]["RequestId"];
                     "X-Credits-Remaining": components["headers"]["CreditsRemaining"];
+                    "X-Weirgate-Funding-Rail": components["headers"]["FundingRail"];
+                    "X-Weirgate-Funding-Fallback": components["headers"]["FundingFallback"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3643,8 +4148,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["InvalidRequest"];
-            401: components["responses"]["InvalidToken"];
-            402: components["responses"]["OutOfAllowance"];
+            401: components["responses"]["UnauthorizedDataPlane"];
+            402: components["responses"]["PaymentRequiredDataPlane"];
             403: components["responses"]["ForbiddenDataPlane"];
             404: components["responses"]["NotFoundDataPlane"];
             422: components["responses"]["UnprocessableDataPlane"];
@@ -3661,6 +4166,8 @@ export interface operations {
                 "X-Feature-Id": components["parameters"]["XFeatureId"];
                 /** @description Canonical idempotency carrier for retried mutations. */
                 "X-Idempotency-Key"?: components["parameters"]["XIdempotencyKey"];
+                /** @description Names the rail to start the feature's funding chain from, optionally with the plan provider: `user_plan; provider=openai_chatgpt`, `user_key`, or `developer`. Absent means walk the chain from its first rail. Later rails still apply per on_refusal. */
+                "X-Weirgate-Funding"?: components["parameters"]["XWeirgateFunding"];
             };
             path?: never;
             cookie?: never;
@@ -3677,6 +4184,8 @@ export interface operations {
                     "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
                     "X-Weirgate-Request-Id": components["headers"]["RequestId"];
                     "X-Credits-Remaining": components["headers"]["CreditsRemaining"];
+                    "X-Weirgate-Funding-Rail": components["headers"]["FundingRail"];
+                    "X-Weirgate-Funding-Fallback": components["headers"]["FundingFallback"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3684,8 +4193,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["InvalidRequest"];
-            401: components["responses"]["InvalidToken"];
-            402: components["responses"]["OutOfAllowance"];
+            401: components["responses"]["UnauthorizedDataPlane"];
+            402: components["responses"]["PaymentRequiredDataPlane"];
             403: components["responses"]["ForbiddenDataPlane"];
             404: components["responses"]["NotFoundDataPlane"];
             422: components["responses"]["UnprocessableDataPlane"];
@@ -3823,6 +4332,83 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+        };
+    };
+    redeemAppleTransaction: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-App-Id": components["parameters"]["XAppId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppleRedeemInput"];
+            };
+        };
+        responses: {
+            /** @description Purchase credited (granted) or credited earlier (already_granted) */
+            200: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppleRedeemResult"];
+                };
+            };
+            /** @description invalid_request, or purchase_invalid_signature (detail.reason is the failed check) */
+            400: {
+                headers: {
+                    "X-Weirgate-Error-Type": components["headers"]["ErrorType"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["ErrorPurchaseAccountMismatch"];
+            404: components["responses"]["ResourceNotFound"];
+            409: components["responses"]["ErrorPurchaseRevoked"];
+            422: components["responses"]["PurchaseRejected"];
+            500: components["responses"]["Internal"];
+        };
+    };
+    receiveAppleNotification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                appId: components["parameters"]["AppIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppleNotificationInput"];
+            };
+        };
+        responses: {
+            /** @description Processed, or a duplicate acknowledged */
+            200: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppleNotificationAck"];
+                };
+            };
+            400: components["responses"]["ErrorPurchaseInvalidSignature"];
+            500: components["responses"]["Internal"];
+            502: components["responses"]["ErrorProviderUnavailable"];
         };
     };
     ingestClientTelemetry: {
@@ -3979,7 +4565,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["InvalidToken"];
-            403: components["responses"]["InsufficientScope"];
+            403: components["responses"]["ForbiddenCheckout"];
             502: components["responses"]["UpstreamFailure"];
         };
     };
@@ -4008,7 +4594,7 @@ export interface operations {
             502: components["responses"]["UpstreamFailure"];
         };
     };
-    setupStripeTestCatalog: {
+    setupStripeCatalog: {
         parameters: {
             query?: never;
             header?: never;
@@ -4017,7 +4603,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Test-mode products, prices, coupons, and portal configuration */
+            /** @description Products, prices, coupons, and portal configuration for the returned mode */
             201: {
                 headers: {
                     "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
@@ -4025,7 +4611,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["StripeTestCatalog"];
+                    "application/json": components["schemas"]["StripeCatalog"];
                 };
             };
             401: components["responses"]["InvalidToken"];
@@ -5012,6 +5598,86 @@ export interface operations {
         responses: {
             200: components["responses"]["UserListOk"];
             400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+        };
+    };
+    listPurchases: {
+        parameters: {
+            query?: {
+                environment?: "test" | "live";
+                external_id?: string;
+                cursor?: string;
+                limit?: components["parameters"]["LimitQuery"];
+            };
+            header?: never;
+            path: {
+                appId: components["parameters"]["AppIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["PurchaseListOk"];
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+        };
+    };
+    getAppleServerApiCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                appId: components["parameters"]["AppIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AppleServerApiCredentialsOk"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+        };
+    };
+    putAppleServerApiCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                appId: components["parameters"]["AppIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppleServerApiCredentialsInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["AppleServerApiCredentialsOk"];
+            201: components["responses"]["AppleServerApiCredentialsOk"];
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+        };
+    };
+    deleteAppleServerApiCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                appId: components["parameters"]["AppIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AppleServerApiCredentialsDeleted"];
             401: components["responses"]["InvalidToken"];
             403: components["responses"]["InsufficientScope"];
             404: components["responses"]["ResourceNotFound"];

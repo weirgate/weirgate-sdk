@@ -159,10 +159,112 @@ is expected: the observer reports `.rejected(.invalidSignature)` and leaves them
 Test real redemption with App Store sandbox (a device build or TestFlight, without a
 `.storekit` file in the scheme); sandbox purchases are recorded as `environment: test`.
 
+## Use the user's AI plan (`PlanConnect`)
+
+A feature's funding chain (`funding.order` in its config) decides who pays for each
+request: the user's AI plan (`user_plan`), the user's own provider key (`user_key`), or
+you (`developer`). `PlanConnect` lets the user connect their ChatGPT Plus or Pro plan with
+Sign in with ChatGPT, and `WeirgateClient` then sends the plan's token with each request to
+features that accept it.
+
+**Status: not usable with real plans yet.** Plan usage in a paid or remotely hosted app
+needs OpenAI's partner approval, for Weirgate and for your app. Until Weirgate records your
+app as `approved`, live features answer `funding_rail_unavailable` and only mock features
+serve the rail. OpenAI has no plan-usage sandbox before approval, so this SDK is tested
+against recorded Weirgate responses, never a real plan.
+
+### Set up
+
+You need the client ID and a redirect URI from your app's partner registration with
+OpenAI. Register a custom-scheme redirect (`myapp://oauth/chatgpt`), or a universal link
+(`https`, needs iOS 17.4 / macOS 14.4).
+
+```swift
+import WeirgateKit
+
+let plan = PlanConnect(
+    configuration: .openAIChatGPT(
+        clientID: "<from your OpenAI partner registration>",
+        redirectURI: URL(string: "myapp://oauth/chatgpt")!,
+        agentNameHint: "My App"
+    ),
+    authorizer: WebAuthenticationSessionAuthorizer { keyWindow() }
+)
+
+let client = WeirgateClient(
+    configuration: .init(appID: "my-app"),
+    tokenProvider: .init { try await auth.freshIDToken() },
+    planCredential: plan
+)
+```
+
+`PlanConnect` signs in with OpenID Connect and PKCE through `ASWebAuthenticationSession`
+(scopes `openid profile email offline_access chatgpt.tokens.use.direct`), keeps the tokens in
+the Keychain (this device only, never synced), stores the replacement refresh token on every
+refresh, refreshes when less than five minutes remain, and serializes refreshes so two
+requests never race a rotating token. It creates a stable opaque host ID (`urn:uuid:…`)
+before the first sign-in and sends it as `ext_agent_host_id`, as OpenAI requires. Pass your
+own `PlanTokenStore` to keep tokens elsewhere; the SDK writes them nowhere else.
+
+### Show the button only where it helps
+
+```swift
+if case .modified(let response, _) = try await client.features() {
+    showContinueWithChatGPT = response.value.offersPlan(.openAIChatGPT)
+    // Or per feature: feature.acceptsPlan(.openAIChatGPT)
+}
+
+let status = try await plan.connect()
+if case .connected(_, funding: false) = status {
+    // The user signed in but did not allow plan usage. The sign-in still identifies them.
+    offer("Use your ChatGPT plan") { try await plan.enablePlanUsage() }  // repeats with prompt=consent
+}
+
+for await status in await plan.statusUpdates() {
+    if case .reconnectRequired = status { showReconnectChatGPT() }
+}
+```
+
+Requirements to check before shipping:
+
+- **Branding.** Label the button **Continue with ChatGPT** and follow OpenAI's Sign in with
+  ChatGPT branding guidelines.
+- **Optional sign-in.** Every feature that works without a plan must keep working without
+  it (App Review guideline 5.1.1(v)). Offer the plan as a choice, never as a gate.
+- **Sign in with Apple.** If ChatGPT is a way to sign in to your app (not just a way to
+  pay), offer Sign in with Apple next to it (guideline 4.8).
+- **Disconnect is lazy.** OpenAI does not tell apps when a user disconnects them in ChatGPT
+  settings. The SDK finds out on the next rejected request and then reports
+  `.reconnectRequired`. Link to ChatGPT's settings for disconnect instructions, and call
+  `plan.disconnect()` from your own UI (it revokes the refresh token and clears the
+  Keychain).
+- Your privacy policy discloses that you receive the user's name, email, and profile picture.
+
+### What the client does for you
+
+`chat` and `streamChat` send `X-Weirgate-User-Credential` only to features whose catalog
+entry accepts the plan (they read `GET /v1/features` once if they haven't), and report who
+paid in `response.metadata.funding` (`rail`, `provider`, and `fallback` when a rail refused
+inside the request).
+
+| Server answer | What the SDK does |
+|---|---|
+| `user_credential_expired` (401) | Refreshes once and repeats the request with the same idempotency key. If the refreshed token is rejected too, or the refresh is refused (`invalid_grant`, `invalid_refresh_token`, `token_expired`, `refresh_token_reused`), clears the tokens and throws `FundingRailError` with `.reconnectRequired` |
+| `funding_rail_refused` (402) with `detail.next_rail` | Repeats once on that rail (`X-Weirgate-Funding: <rail>`, idempotency key `<key>:rail:<rail>`, no plan token unless the rail is `user_plan`); at most two hops |
+| `funding_rail_refused` without `next_rail` | Throws `FundingRailError` `.railRefused` with `reason`, `providerRequestID` |
+| `funding_rail_unavailable` (403) | Throws `.railUnavailable`; a configuration problem, not retried |
+| `X-Weirgate-Funding-Fallback: user_plan; …; disable` on a success | Returns the response, clears the plan, and reports `.reconnectRequired(.railDisabled)` |
+| Stream ends with `data: {"error": …}` | `chunks` throws `FundingRailError` after the partial chunks. Discard the partial answer and call again with `error.retryOptions(from: options)` when it is non-nil |
+
+`FundingPreference` controls where the chain starts: `.serverChain` (default) or
+`.startAt(.developer)` to skip the user's plan, per client or per call
+(`RequestOptions(funding:)`).
+
 ## Privacy and errors
 
 `UserProviderKey` is accepted only per call. It is redacted from descriptions, never
-logged by the package, and requests use an ephemeral URL session with no URL cache.
+logged by the package, and requests use an ephemeral URL session with no URL cache. Plan
+access tokens are sent per request and stored only by `PlanConnect`'s token store.
 Typed HTTP failures use `WeirgateError.type`; consumers never inspect message strings.
 
 See the [SDK guide](https://weirgate.com/guides/sdks/) and
