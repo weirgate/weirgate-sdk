@@ -2,7 +2,7 @@
 
 All notable public SDK changes are recorded here.
 
-## Unreleased
+## @weirgate/sdk 0.3.0 and WeirgateKit 0.4.0 — 2026-10-03
 
 Funding rails v2, Phase 2: let an app offer "use your ChatGPT plan" on top of the funding
 chain the server enforces (weirgate#124, spec provenance weirgate `25282cf`). Nothing here
