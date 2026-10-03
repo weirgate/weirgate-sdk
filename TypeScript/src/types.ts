@@ -1,4 +1,5 @@
 import type { components } from "./generated/schema.js";
+import type { FundingOutcome, FundingPreference } from "./funding.js";
 
 export type ErrorType = components["schemas"]["ErrorType"];
 export type ErrorEnvelope = components["schemas"]["ErrorEnvelope"];
@@ -62,6 +63,15 @@ export const ERROR_TYPES = [
   "rate_limited",
   "telemetry_request_unavailable",
   "provider_unavailable",
+  "purchase_invalid_signature",
+  "purchase_wrong_app",
+  "purchase_environment_mismatch",
+  "purchase_unknown_product",
+  "purchase_revoked",
+  "purchase_account_mismatch",
+  "funding_rail_refused",
+  "funding_rail_unavailable",
+  "user_credential_expired",
   "internal",
 ] as const satisfies readonly ErrorType[];
 
@@ -78,6 +88,8 @@ export interface ResponseMetadata {
 export interface WeirgateResult<T> extends ResponseMetadata {
   data: T;
   headers: Headers;
+  /** Who paid, on chat and embedding results; absent elsewhere. */
+  funding?: FundingOutcome | null;
 }
 
 export type CatalogResult =
@@ -88,6 +100,8 @@ export interface RequestOptions {
   idempotencyKey?: string | undefined;
   userProviderKey?: string | undefined;
   signal?: AbortSignal | undefined;
+  /** Overrides the client's `fundingPreference` for this call (chat, streaming, embeddings). */
+  funding?: FundingPreference | undefined;
 }
 
 /**
@@ -117,4 +131,6 @@ export interface UsageQuery {
 export interface ChatStream extends ResponseMetadata {
   creditsRemaining: number | null;
   chunks: AsyncIterable<ChatCompletionChunk>;
+  /** Who is paying for this stream, from the response headers. */
+  funding?: FundingOutcome | null;
 }

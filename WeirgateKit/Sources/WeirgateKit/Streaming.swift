@@ -47,6 +47,7 @@ struct SSEContractAccumulator {
             return nil
         }
         guard let data = payload.data(using: .utf8) else { throw ParsingError.invalidUTF8 }
+        if let frame = try? decoder.decode(ErrorFrameEnvelope.self, from: data) { throw frame.error }
         let chunk = try decoder.decode(ChatCompletionChunk.self, from: data)
         if chunk.usage != nil { sawUsage = true }
         if chunk.choices.contains(where: { $0.finishReason != nil }) { sawFinishReason = true }
@@ -58,4 +59,21 @@ struct SSEContractAccumulator {
     }
 
     enum ParsingError: Error { case invalidUTF8, interrupted }
+
+    /// `data: {"error": {type, message, request_id, detail}}`: the typed final frame of a
+    /// stream whose funding rail refused after it started. The type stays a string so an
+    /// unknown type still surfaces.
+    struct ErrorFrame: Error, Decodable {
+        let type: String
+        let message: String?
+        let requestID: String?
+        let detail: [String: JSONValue]?
+
+        enum CodingKeys: String, CodingKey {
+            case type, message, detail
+            case requestID = "request_id"
+        }
+    }
+
+    struct ErrorFrameEnvelope: Decodable { let error: ErrorFrame }
 }

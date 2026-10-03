@@ -7,7 +7,7 @@ import Testing
 
 /// Serves canned responses per URL host, so tests that each use their own host can run in
 /// parallel.
-private final class StubURLProtocol: URLProtocol, @unchecked Sendable {
+final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     typealias Handler = @Sendable (URLRequest) throws -> (HTTPURLResponse, Data)
     private static let lock = NSLock()
     nonisolated(unsafe) private static var handlers: [String: Handler] = [:]
@@ -98,7 +98,7 @@ private func errorResponse(
 }
 
 /// Request bodies arrive as a stream through URLProtocol.
-private func bodyJSON(_ request: URLRequest) -> [String: String] {
+func bodyJSON(_ request: URLRequest) -> [String: String] {
     var data = request.httpBody ?? Data()
     if data.isEmpty, let stream = request.httpBodyStream {
         stream.open()
@@ -113,7 +113,7 @@ private func bodyJSON(_ request: URLRequest) -> [String: String] {
     return (try? JSONSerialization.jsonObject(with: data) as? [String: String]) ?? [:]
 }
 
-private final class Counter: @unchecked Sendable {
+final class Counter: @unchecked Sendable {
     private let lock = NSLock()
     private var value = 0
     func syncIncrement() -> Int { lock.withLock { value += 1; return value } }
@@ -203,7 +203,8 @@ func errorRegistry() {
         "proposal_stale", "rate_limited", "telemetry_request_unavailable",
         "provider_unavailable", "purchase_invalid_signature", "purchase_wrong_app",
         "purchase_environment_mismatch", "purchase_unknown_product", "purchase_revoked",
-        "purchase_account_mismatch", "internal"
+        "purchase_account_mismatch", "funding_rail_refused", "funding_rail_unavailable",
+        "user_credential_expired", "internal"
     ]))
 }
 
@@ -260,7 +261,7 @@ func providerKeyRedaction() throws {
 func provenance() {
     #expect(WeirgateKitInfo.version == "0.3.0")
     #expect(WeirgateKitInfo.apiVersion == "2026-07-18")
-    #expect(WeirgateKitInfo.specSourceCommit == "8694e3bd2bb3bf425e0cff1aa0e1cc99e79e6191")
+    #expect(WeirgateKitInfo.specSourceCommit == "25282cf16aa367fd77cbd0bc3fd89c799a18e59b")
 }
 
 // MARK: - Balance

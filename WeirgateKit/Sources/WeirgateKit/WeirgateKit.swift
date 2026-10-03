@@ -3,7 +3,7 @@ import Foundation
 public enum WeirgateKitInfo {
     public static let version = "0.3.0"
     public static let apiVersion = "2026-07-18"
-    public static let specSourceCommit = "8694e3bd2bb3bf425e0cff1aa0e1cc99e79e6191"
+    public static let specSourceCommit = "25282cf16aa367fd77cbd0bc3fd89c799a18e59b"
 }
 
 public struct WeirgateTokenProvider: Sendable {
@@ -36,25 +36,37 @@ public struct WeirgateConfiguration: Sendable {
     public let baseURL: URL
     public let appID: String
     public let automaticallySubmitTelemetry: Bool
+    /// The default starting rail for chat requests; per-call ``RequestOptions/funding``
+    /// overrides it.
+    public let fundingPreference: FundingPreference
 
     public init(
         baseURL: URL = URL(string: "https://api.weirgate.com")!,
         appID: String,
-        automaticallySubmitTelemetry: Bool = true
+        automaticallySubmitTelemetry: Bool = true,
+        fundingPreference: FundingPreference = .serverChain
     ) {
         self.baseURL = baseURL
         self.appID = appID
         self.automaticallySubmitTelemetry = automaticallySubmitTelemetry
+        self.fundingPreference = fundingPreference
     }
 }
 
 public struct RequestOptions: Sendable {
     public let idempotencyKey: String?
     public let userProviderKey: UserProviderKey?
+    /// Overrides ``WeirgateConfiguration/fundingPreference`` for this call.
+    public let funding: FundingPreference?
 
-    public init(idempotencyKey: String? = nil, userProviderKey: UserProviderKey? = nil) {
+    public init(
+        idempotencyKey: String? = nil,
+        userProviderKey: UserProviderKey? = nil,
+        funding: FundingPreference? = nil
+    ) {
         self.idempotencyKey = idempotencyKey
         self.userProviderKey = userProviderKey
+        self.funding = funding
     }
 }
 
@@ -62,11 +74,14 @@ public struct ResponseMetadata: Sendable, Equatable {
     public let requestID: String
     public let apiVersion: String
     public let statusCode: Int
+    /// Who paid for a chat request, from the funding response headers; `nil` elsewhere.
+    public let funding: FundingOutcome?
 
-    public init(requestID: String, apiVersion: String, statusCode: Int) {
+    public init(requestID: String, apiVersion: String, statusCode: Int, funding: FundingOutcome? = nil) {
         self.requestID = requestID
         self.apiVersion = apiVersion
         self.statusCode = statusCode
+        self.funding = funding
     }
 }
 

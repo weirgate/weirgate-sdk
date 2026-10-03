@@ -33,12 +33,23 @@ import {
   type WeirgateResult,
 } from "./types.js";
 import {
+  FundingRailError,
+  PlanReconnectRequiredError,
   UsageTruncatedError,
   WeirgateError,
   WeirgateNetworkError,
   WeirgateProtocolError,
   WeirgateStreamError,
+  errorFromStreamFrame,
 } from "./errors.js";
+import {
+  fundingHeaderValue,
+  parseFundingHeaders,
+  type FundingOutcome,
+  type FundingPreference,
+  type FundingRail,
+  type PlanCredentialSource,
+} from "./funding.js";
 
 export interface WeirgateOptions {
   appId?: string;
@@ -46,7 +57,22 @@ export interface WeirgateOptions {
   token?: string | (() => string | Promise<string>);
   adminKey?: string;
   fetch?: typeof globalThis.fetch;
+  /** Default starting rail for chat, streaming, and embeddings. Default: `"server_chain"`. */
+  fundingPreference?: FundingPreference;
+  /**
+   * The end user's plan connection for the `user_plan` rail. When it has a funding token,
+   * requests to features whose catalog entry accepts its provider send it as
+   * `X-Weirgate-User-Credential`.
+   */
+  planCredential?: PlanCredentialSource;
 }
+
+type FeatureFunding = FeatureCatalog["data"][number]["funding"];
+
+/** At most this many `next_rail` hops per call. */
+const MAX_RAIL_HOPS = 2;
+/** Re-read the catalog for an unknown feature at most this often. */
+const CATALOG_REFRESH_MS = 5 * 60_000;
 
 interface InternalRequestOptions extends RequestOptions {
   headers?: HeadersInit | undefined;
@@ -61,6 +87,11 @@ export class Weirgate {
   private readonly token: WeirgateOptions["token"] | undefined;
   private readonly adminKey: string | undefined;
   private readonly fetcher: typeof globalThis.fetch;
+  private fundingPreference: FundingPreference;
+  private planCredential: PlanCredentialSource | undefined;
+  /** Feature chains from the last catalog read, so a plan token goes only where it is accepted. */
+  private catalogFunding = new Map<string, FeatureFunding>();
+  private catalogReadAt: number | null = null;
 
   constructor(options: WeirgateOptions = {}) {
     this.appId = options.appId;
@@ -69,6 +100,18 @@ export class Weirgate {
     this.adminKey = options.adminKey;
     this.fetcher = options.fetch ?? globalThis.fetch;
     if (!this.fetcher) throw new TypeError("A Fetch API implementation is required");
+    this.fundingPreference = options.fundingPreference ?? "server_chain";
+    this.planCredential = options.planCredential;
+  }
+
+  /** Attach or remove the plan connection used for the `user_plan` rail. */
+  setPlanCredential(source: PlanCredentialSource | undefined): void {
+    this.planCredential = source;
+  }
+
+  /** Change the default starting rail for later calls. */
+  setFundingPreference(preference: FundingPreference): void {
+    this.fundingPreference = preference;
   }
 
   health(signal?: AbortSignal): Promise<WeirgateResult<Health>> {
@@ -88,6 +131,10 @@ export class Weirgate {
     }
     if (!response.ok) throw await WeirgateError.fromResponse(response);
     const data = await this.json<FeatureCatalog>(response, metadata);
+    this.catalogFunding = new Map(
+      data.data.filter((entry) => entry.funding).map((entry) => [entry.feature_id, entry.funding]),
+    );
+    this.catalogReadAt = Date.now();
     return { kind: "modified", data, etag: responseEtag, headers: response.headers, ...metadata };
   }
 
@@ -101,28 +148,31 @@ export class Weirgate {
     return this.requestJson("DELETE", "/v1/account", undefined, { signal });
   }
 
-  chat(
+  /**
+   * A chat completion. The feature's funding chain decides who pays. Retries happen here:
+   * `user_credential_expired` refreshes the plan once and repeats the request with the same
+   * idempotency key; `funding_rail_refused` with `next_rail` repeats it once on that rail.
+   */
+  async chat(
     featureId: string,
     request: ChatCompletionInput,
     options: RequestOptions = {},
   ): Promise<WeirgateResult<ChatCompletion>> {
     this.requireAppId();
-    return this.requestJson("POST", "/v1/chat/completions", { ...request, stream: false }, {
-      ...options,
-      headers: { "X-Feature-Id": featureId },
-    });
+    const { response, metadata, funding } = await this.funded(
+      "/v1/chat/completions", featureId, { ...request, stream: false }, options,
+    );
+    return { data: await this.json<ChatCompletion>(response, metadata), headers: response.headers, funding, ...metadata };
   }
 
-  embedding(
+  async embedding(
     featureId: string,
     request: EmbeddingRequest,
     options: RequestOptions = {},
   ): Promise<WeirgateResult<EmbeddingResponse>> {
     this.requireAppId();
-    return this.requestJson("POST", "/v1/embeddings", request, {
-      ...options,
-      headers: { "X-Feature-Id": featureId },
-    });
+    const { response, metadata, funding } = await this.funded("/v1/embeddings", featureId, request, options);
+    return { data: await this.json<EmbeddingResponse>(response, metadata), headers: response.headers, funding, ...metadata };
   }
 
   telemetry(
@@ -133,18 +183,21 @@ export class Weirgate {
     return this.requestJson("POST", "/v1/telemetry/client", input, options);
   }
 
+  /**
+   * A streamed chat completion with `chat`'s funding behavior before headers. After the
+   * stream starts, a rail refusal is the stream's final frame: `chunks` throws a
+   * `FundingRailRefusedError` (no usage, no `[DONE]`). Discard the partial answer and call
+   * again with `error.retryOptions(options)`.
+   */
   async streamChat(
     featureId: string,
     request: ChatCompletionInput,
     options: RequestOptions = {},
   ): Promise<ChatStream> {
     this.requireAppId();
-    const response = await this.send("POST", "/v1/chat/completions", { ...request, stream: true }, {
-      ...options,
-      headers: { "X-Feature-Id": featureId },
-    });
-    const metadata = this.metadata(response);
-    if (!response.ok) throw await WeirgateError.fromResponse(response);
+    const { response, metadata, funding, idempotencyKey } = await this.funded(
+      "/v1/chat/completions", featureId, { ...request, stream: true }, options,
+    );
     if (!response.headers.get("content-type")?.toLowerCase().includes("text/event-stream")) {
       throw new WeirgateStreamError(
         "invalid_content_type",
@@ -160,7 +213,8 @@ export class Weirgate {
     return {
       ...metadata,
       creditsRemaining: numericHeader(response.headers.get("x-credits-remaining")),
-      chunks: this.parseSSE(body, metadata),
+      chunks: this.parseSSE(body, metadata, idempotencyKey),
+      funding,
     };
   }
 
@@ -302,6 +356,104 @@ export class Weirgate {
     );
   }
 
+  /** One funded data-plane call with plan header injection and the funding retry rules. */
+  private async funded(
+    path: string,
+    featureId: string,
+    body: unknown,
+    options: RequestOptions,
+  ): Promise<{ response: Response; metadata: ResponseMetadata; funding: FundingOutcome | null; idempotencyKey: string }> {
+    let idempotencyKey = options.idempotencyKey ?? randomIdempotencyKey();
+    let preference = options.funding ?? this.fundingPreference;
+    const source = this.planCredential;
+    let token = await this.planToken(featureId, preference, source);
+    let refreshed = false;
+    let hops = 0;
+    for (;;) {
+      const headers: Record<string, string> = { "X-Feature-Id": featureId };
+      const funding = this.fundingHeader(featureId, preference, token, source);
+      if (funding) headers["X-Weirgate-Funding"] = funding;
+      if (token) headers["X-Weirgate-User-Credential"] = token;
+      const response = await this.send("POST", path, body, { ...options, idempotencyKey, headers });
+      const metadata = this.metadata(response);
+      if (response.ok) {
+        const outcome = parseFundingHeaders(response.headers);
+        if (source && token && outcome?.fallback?.disable && outcome.fallback.refusedRail === "user_plan") {
+          await source.requireReconnect({ kind: "rail_disabled", reason: outcome.fallback.reason });
+        }
+        return { response, metadata, funding: outcome, idempotencyKey };
+      }
+      const error = await WeirgateError.fromResponse(response);
+      if (error instanceof FundingRailError) error.idempotencyKey = idempotencyKey;
+      if (error.type === "user_credential_expired" && source && token) {
+        if (refreshed) {
+          const reason = { kind: "credential_rejected" as const, providerCode: (error as FundingRailError).providerCode };
+          await source.requireReconnect(reason);
+          throw new PlanReconnectRequiredError(reason, error);
+        }
+        refreshed = true;
+        const result = await source.refreshAccessToken(token);
+        if (result.kind === "reconnect_required") throw new PlanReconnectRequiredError(result.reason, error);
+        token = result.accessToken;
+        continue;
+      }
+      if (error instanceof FundingRailError && error.type === "funding_rail_refused" && error.nextRail && hops < MAX_RAIL_HOPS) {
+        hops += 1;
+        const next: FundingRail = error.nextRail;
+        idempotencyKey = `${idempotencyKey}:rail:${next}`;
+        preference = { startAt: next };
+        if (next !== "user_plan") token = null;
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  /** The plan token to send, or null when the chain starts past the plan, the feature does not accept the provider, or the plan is not funding. */
+  private async planToken(
+    featureId: string,
+    preference: FundingPreference,
+    source: PlanCredentialSource | undefined,
+  ): Promise<string | null> {
+    if (!source) return null;
+    if (preference !== "server_chain") {
+      if (preference.startAt !== "user_plan") return null;
+      if (preference.provider && preference.provider !== source.provider) return null;
+    }
+    const accepts = (funding: FeatureFunding | undefined) => Boolean(funding
+      && (funding.order as readonly string[]).includes("user_plan")
+      && (funding.plan_providers as readonly string[]).includes(source.provider));
+    const known = this.catalogFunding.get(featureId);
+    if (known) return accepts(known) ? await source.fundingAccessToken() : null;
+    // Read the catalog only when there is a token to send.
+    const token = await source.fundingAccessToken();
+    if (!token) return null;
+    return accepts(await this.featureFunding(featureId)) ? token : null;
+  }
+
+  private fundingHeader(
+    featureId: string,
+    preference: FundingPreference,
+    token: string | null,
+    source: PlanCredentialSource | undefined,
+  ): string | null {
+    if (!token || !source) return fundingHeaderValue(preference);
+    const plan = fundingHeaderValue({ startAt: "user_plan", provider: source.provider });
+    if (preference !== "server_chain") return plan;
+    // The server defaults to the feature's first plan provider; name ours otherwise.
+    return this.catalogFunding.get(featureId)?.plan_providers[0] === source.provider ? null : plan;
+  }
+
+  /** A failed catalog read means "no plan" rather than a failed call. */
+  private async featureFunding(featureId: string): Promise<FeatureFunding | undefined> {
+    const known = this.catalogFunding.get(featureId);
+    if (known) return known;
+    if (this.catalogReadAt !== null && Date.now() - this.catalogReadAt < CATALOG_REFRESH_MS) return undefined;
+    this.catalogReadAt = Date.now();
+    await this.features().catch(() => undefined);
+    return this.catalogFunding.get(featureId);
+  }
+
   private async requestJson<T>(
     method: string,
     path: string,
@@ -351,6 +503,7 @@ export class Weirgate {
   private async *parseSSE(
     body: ReadableStream<Uint8Array>,
     metadata: ResponseMetadata,
+    idempotencyKey: string | null = null,
   ): AsyncGenerator<ChatCompletionChunk> {
     const reader = body.getReader();
     const decoder = new TextDecoder();
@@ -389,6 +542,13 @@ export class Weirgate {
               metadata.apiVersion,
               "Weirgate stream contained invalid JSON",
             );
+          }
+          const frameError = (chunk as { error?: unknown }).error;
+          if (frameError && typeof frameError === "object") {
+            // A typed refusal after the stream started (x-weirgate-sse mid_stream_error).
+            const error = errorFromStreamFrame(frameError, metadata);
+            if (error instanceof FundingRailError) error.idempotencyKey = idempotencyKey;
+            throw error;
           }
           if (!Array.isArray(chunk.choices)) {
             throw new WeirgateStreamError(

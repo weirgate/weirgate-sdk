@@ -26,6 +26,9 @@ public enum WeirgateErrorType: String, Codable, CaseIterable, Sendable {
     case purchaseUnknownProduct = "purchase_unknown_product"
     case purchaseRevoked = "purchase_revoked"
     case purchaseAccountMismatch = "purchase_account_mismatch"
+    case fundingRailRefused = "funding_rail_refused"
+    case fundingRailUnavailable = "funding_rail_unavailable"
+    case userCredentialExpired = "user_credential_expired"
     case internalError = "internal"
 }
 

@@ -64,6 +64,106 @@ tier then takes effect immediately and ends on time. `balance.unlimited` and
 Keep admin keys server-side. End-user applications must not embed this management
 surface or its credential.
 
+## Use the user's AI plan (web apps)
+
+A feature's funding chain decides who pays for each request: the user's AI plan
+(`user_plan`), the user's own provider key (`user_key`), or you (`developer`). Give the
+client a `planCredential` and it sends the user's ChatGPT plan token
+(`X-Weirgate-User-Credential`) to features whose catalog entry accepts it.
+
+**Status: not usable with real plans yet.** Plan usage in a paid or remotely hosted app
+needs OpenAI's partner approval, for Weirgate and for your app. Until Weirgate records your
+app as `approved`, live features answer `funding_rail_unavailable`; only mock features
+serve the rail. OpenAI has no plan-usage sandbox before approval, so this SDK is tested
+against recorded Weirgate responses, never a real plan.
+
+```ts
+import { Weirgate, offersPlan, PlanReconnectRequiredError, FundingRailError } from "@weirgate/sdk";
+
+const client = new Weirgate({ appId: "my-app", token: getFreshEndUserJWT, planCredential: chatgptPlan });
+
+const catalog = await client.features();
+if (catalog.kind === "modified") showContinueWithChatGPT(offersPlan(catalog.data, "openai_chatgpt"));
+
+try {
+  const result = await client.chat("assistant", { messages });
+  console.log(result.funding); // { rail: "user_plan", provider: "openai_chatgpt", fallback: null }
+} catch (error) {
+  if (error instanceof PlanReconnectRequiredError) showReconnectChatGPT();
+  else if (error instanceof FundingRailError) console.warn(error.type, error.reason, error.providerRequestId);
+  else throw error;
+}
+```
+
+The client applies the funding retry rules for `chat`, `streamChat`, and `embedding`:
+
+| Server answer | What the SDK does |
+|---|---|
+| `user_credential_expired` (401) | Calls `refreshAccessToken` once and repeats the request with the same idempotency key. A second rejection, or a refused refresh, calls `requireReconnect` and throws `PlanReconnectRequiredError` |
+| `funding_rail_refused` (402) with `detail.next_rail` | Repeats once on that rail (`X-Weirgate-Funding`, key `<key>:rail:<rail>`, no plan token unless the rail is `user_plan`); at most two hops |
+| `funding_rail_refused` without `next_rail` | Throws `FundingRailRefusedError` (`rail`, `reason`, `providerRequestId`) |
+| `funding_rail_unavailable` (403) | Throws `FundingRailUnavailableError`; a configuration problem, not retried |
+| `X-Weirgate-Funding-Fallback: user_plan; …; disable` on a success | Returns the result and calls `requireReconnect({ kind: "rail_disabled" })` |
+| Stream ends with `data: {"error": …}` | `chunks` throws `FundingRailRefusedError` after the partial chunks. Discard the partial answer and call again with `error.retryOptions(options)` when it is not null |
+
+`fundingPreference` (client option, or `funding` per call) picks where the chain starts:
+`"server_chain"` (default) or `{ startAt: "developer" }` to skip the user's plan.
+
+### Recipe: Sign in with ChatGPT in a browser app
+
+The SDK does not ship a browser OAuth flow. OpenAI forbids keeping these tokens in browser
+storage, and the redirect URI belongs to your app, so the OAuth half runs on your server:
+
+1. Your server starts OpenID Connect with PKCE at
+   `https://auth.openai.com/api/accounts/authorize` with your partner client ID, your
+   registered redirect URI, scopes `openid profile email offline_access
+   chatgpt.tokens.use.direct`, `resource=https://api.openai.com/v1`, fresh `state`, `nonce`,
+   and `code_challenge` (S256), and a stable `ext_agent_host_id` (`urn:uuid:…`) for your
+   deployment. Add `prompt=consent` to re-ask for plan usage.
+2. Your callback route checks `state`, exchanges the code at
+   `https://auth.openai.com/api/accounts/oauth/token`, checks the ID token's `nonce`, and
+   stores the refresh token server-side against the user's session. If the token response's
+   `scope` lacks `chatgpt.tokens.use.direct`, keep the sign-in but don't offer plan usage.
+3. Your server refreshes when less than five minutes remain, one refresh at a time per
+   user, and stores the rotated refresh token every time. On `invalid_grant`,
+   `invalid_refresh_token`, `token_expired`, or `refresh_token_reused`, it deletes the tokens.
+4. The browser keeps only the short-lived access token, in memory:
+
+```ts
+import type { PlanCredentialSource } from "@weirgate/sdk";
+
+let accessToken: string | null = null;
+const chatgptPlan: PlanCredentialSource = {
+  provider: "openai_chatgpt",
+  async fundingAccessToken() {
+    accessToken ??= (await (await fetch("/api/chatgpt/access-token")).json()).token ?? null;
+    return accessToken;
+  },
+  async refreshAccessToken(rejected) {
+    const response = await fetch("/api/chatgpt/refresh", { method: "POST", body: JSON.stringify({ rejected }) });
+    const body = await response.json();
+    if (response.status === 401) {
+      accessToken = null;
+      return { kind: "reconnect_required", reason: { kind: "refresh_rejected", oauthError: body.error } };
+    }
+    if (!response.ok) throw new Error("refresh failed; try again");
+    accessToken = body.token;
+    return { kind: "refreshed", accessToken: body.token };
+  },
+  async requireReconnect() {
+    accessToken = null;
+    await fetch("/api/chatgpt/disconnect", { method: "POST" }); // server deletes the tokens
+    showReconnectChatGPT();
+  },
+};
+```
+
+Before shipping: label the button **Continue with ChatGPT** with OpenAI's branding; keep
+every feature that works without a plan working without it; disclose in your privacy policy
+that you receive the user's name, email, and profile picture; and remember that OpenAI does
+not notify apps when a user disconnects them, so you learn it on the next rejected request.
+Link to ChatGPT's settings for disconnect instructions.
+
 ## Credits API for your own payment system
 
 Weirgate never charges end users. Your payment system takes the money, and your server

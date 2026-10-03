@@ -48,6 +48,23 @@ reauthenticate as needed and retry the sequence; Weirgate replay is idempotent.
 updated transactions, and finishes each one only when Weirgate credits it or reports it
 refunded. See the [WeirgateKit README](./WeirgateKit/README.md#app-store-credit-packs-weirgatestorekit).
 
+## Use the user's AI plan (funding rails)
+
+Each feature's funding chain decides who pays for a request: the user's AI plan
+(`user_plan`, first provider `openai_chatgpt`), the user's own provider key (`user_key`),
+or the developer (`developer`). Swift's `PlanConnect` connects the user's ChatGPT plan with
+Sign in with ChatGPT (PKCE, Keychain, rotating refresh); both clients send the plan token
+per request only to features that accept it, report who paid, apply the funding retry
+rules, and type the three funding errors and the mid-stream error frame. Web apps implement
+`PlanCredentialSource` against their own server; the
+[TypeScript README](./TypeScript/README.md#use-the-users-ai-plan-web-apps) has the recipe.
+See the [WeirgateKit README](./WeirgateKit/README.md#use-the-users-ai-plan-planconnect).
+
+Plan usage in a paid or remotely hosted app needs OpenAI's partner approval, and OpenAI has
+no plan-usage sandbox before approval. No app is approved yet, so none of this has run
+against a real plan: tests replay Weirgate responses recorded from the server
+([`fixtures/funding-rails/`](./fixtures/funding-rails/)).
+
 ## Credits API (TypeScript, server-side)
 
 Developer servers that sell credits through their own payment system (Stripe,
