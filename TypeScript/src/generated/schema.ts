@@ -3928,7 +3928,7 @@ export interface components {
         /** @description Names the rail to start the feature's funding chain from, optionally with the plan provider: `user_plan; provider=openai_chatgpt`, `user_key`, or `developer`. Absent means walk the chain from its first rail. Later rails still apply per on_refusal. */
         XWeirgateFunding: string;
         XFeatureId: components["schemas"]["FeatureId"];
-        /** @description Canonical idempotency carrier for retried mutations. */
+        /** @description Canonical idempotency carrier for retried mutations. On metered calls (chat, embeddings) a retry whose earlier attempt was refunded (a typed error such as user_credential_expired, an upstream failure, or a stream that ended early) runs as a new attempt and is settled and metered once; a retry of a settled attempt replays. */
         XIdempotencyKey: string;
         /** @description Stable key that makes a tier mutation and optional top-up replay-safe. */
         XRequiredIdempotencyKey: string;
@@ -4118,7 +4118,7 @@ export interface operations {
             header: {
                 "X-App-Id": components["parameters"]["XAppId"];
                 "X-Feature-Id": components["parameters"]["XFeatureId"];
-                /** @description Canonical idempotency carrier for retried mutations. */
+                /** @description Canonical idempotency carrier for retried mutations. On metered calls (chat, embeddings) a retry whose earlier attempt was refunded (a typed error such as user_credential_expired, an upstream failure, or a stream that ended early) runs as a new attempt and is settled and metered once; a retry of a settled attempt replays. */
                 "X-Idempotency-Key"?: components["parameters"]["XIdempotencyKey"];
                 /** @description Names the rail to start the feature's funding chain from, optionally with the plan provider: `user_plan; provider=openai_chatgpt`, `user_key`, or `developer`. Absent means walk the chain from its first rail. Later rails still apply per on_refusal. */
                 "X-Weirgate-Funding"?: components["parameters"]["XWeirgateFunding"];
@@ -4164,7 +4164,7 @@ export interface operations {
             header: {
                 "X-App-Id": components["parameters"]["XAppId"];
                 "X-Feature-Id": components["parameters"]["XFeatureId"];
-                /** @description Canonical idempotency carrier for retried mutations. */
+                /** @description Canonical idempotency carrier for retried mutations. On metered calls (chat, embeddings) a retry whose earlier attempt was refunded (a typed error such as user_credential_expired, an upstream failure, or a stream that ended early) runs as a new attempt and is settled and metered once; a retry of a settled attempt replays. */
                 "X-Idempotency-Key"?: components["parameters"]["XIdempotencyKey"];
                 /** @description Names the rail to start the feature's funding chain from, optionally with the plan provider: `user_plan; provider=openai_chatgpt`, `user_key`, or `developer`. Absent means walk the chain from its first rail. Later rails still apply per on_refusal. */
                 "X-Weirgate-Funding"?: components["parameters"]["XWeirgateFunding"];
@@ -4537,7 +4537,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Canonical idempotency carrier for retried mutations. */
+                /** @description Canonical idempotency carrier for retried mutations. On metered calls (chat, embeddings) a retry whose earlier attempt was refunded (a typed error such as user_credential_expired, an upstream failure, or a stream that ended early) runs as a new attempt and is settled and metered once; a retry of a settled attempt replays. */
                 "X-Idempotency-Key"?: components["parameters"]["XIdempotencyKey"];
             };
             path?: never;
@@ -5185,7 +5185,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Canonical idempotency carrier for retried mutations. */
+                /** @description Canonical idempotency carrier for retried mutations. On metered calls (chat, embeddings) a retry whose earlier attempt was refunded (a typed error such as user_credential_expired, an upstream failure, or a stream that ended early) runs as a new attempt and is settled and metered once; a retry of a settled attempt replays. */
                 "X-Idempotency-Key"?: components["parameters"]["XIdempotencyKey"];
             };
             path: {
@@ -5359,7 +5359,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Canonical idempotency carrier for retried mutations. */
+                /** @description Canonical idempotency carrier for retried mutations. On metered calls (chat, embeddings) a retry whose earlier attempt was refunded (a typed error such as user_credential_expired, an upstream failure, or a stream that ended early) runs as a new attempt and is settled and metered once; a retry of a settled attempt replays. */
                 "X-Idempotency-Key"?: components["parameters"]["XIdempotencyKey"];
             };
             path: {
@@ -5468,7 +5468,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Canonical idempotency carrier for retried mutations. */
+                /** @description Canonical idempotency carrier for retried mutations. On metered calls (chat, embeddings) a retry whose earlier attempt was refunded (a typed error such as user_credential_expired, an upstream failure, or a stream that ended early) runs as a new attempt and is settled and metered once; a retry of a settled attempt replays. */
                 "X-Idempotency-Key"?: components["parameters"]["XIdempotencyKey"];
             };
             path: {
@@ -5854,7 +5854,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Canonical idempotency carrier for retried mutations. */
+                /** @description Canonical idempotency carrier for retried mutations. On metered calls (chat, embeddings) a retry whose earlier attempt was refunded (a typed error such as user_credential_expired, an upstream failure, or a stream that ended early) runs as a new attempt and is settled and metered once; a retry of a settled attempt replays. */
                 "X-Idempotency-Key"?: components["parameters"]["XIdempotencyKey"];
             };
             path: {

@@ -259,9 +259,9 @@ func providerKeyRedaction() throws {
 
 @Test("package records frozen spec provenance")
 func provenance() {
-    #expect(WeirgateKitInfo.version == "0.4.0")
+    #expect(WeirgateKitInfo.version == "0.4.1")
     #expect(WeirgateKitInfo.apiVersion == "2026-07-18")
-    #expect(WeirgateKitInfo.specSourceCommit == "25282cf16aa367fd77cbd0bc3fd89c799a18e59b")
+    #expect(WeirgateKitInfo.specSourceCommit == "0738d89c371ca47412ec463a843766edfd7c75dc")
 }
 
 // MARK: - Balance
