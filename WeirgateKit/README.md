@@ -254,7 +254,7 @@ inside the request).
 | `funding_rail_refused` without `next_rail` | Throws `FundingRailError` `.railRefused` with `reason`, `providerRequestID` |
 | `funding_rail_unavailable` (403) | Throws `.railUnavailable`; a configuration problem, not retried |
 | `X-Weirgate-Funding-Fallback: user_plan; …; disable` on a success | Returns the response, clears the plan, and reports `.reconnectRequired(.railDisabled)` |
-| Stream ends with `data: {"error": …}` | `chunks` throws `FundingRailError` after the partial chunks. Discard the partial answer and call again with `error.retryOptions(from: options)` when it is non-nil |
+| Stream ends with `data: {"error": …}` | `chunks` throws `FundingRailError` after the partial chunks. Discard the partial answer and call again with `error.retryOptions(from: options)` when it is non-nil. If the frame has `detail.disable` (`error.disablesRail`) for the plan the stream used, the plan is cleared first and reports `.reconnectRequired(.railDisabled)` |
 
 `FundingPreference` controls where the chain starts: `.serverChain` (default) or
 `.startAt(.developer)` to skip the user's plan, per client or per call

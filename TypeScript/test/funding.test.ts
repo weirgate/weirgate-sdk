@@ -318,6 +318,45 @@ describe("streaming", () => {
     else expect(retry).toBeNull();
   });
 
+  it("disconnects the plan when the mid-stream frame disables its rail", async () => {
+    const plan = new FakePlan("plan-access-token");
+    const { weirgate } = client({ plan }, () => replay("stream_mid_stream_not_eligible"));
+    const stream = await weirgate.streamChat("assistant", hello, { idempotencyKey: "k-s4" });
+    const error = await (async () => {
+      for await (const _ of stream.chunks) { /* partial */ }
+    })().catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(FundingRailRefusedError);
+    expect(error).toMatchObject({ reason: "user_not_eligible", disable: true, nextRail: "developer" });
+    expect((error as FundingRailRefusedError).retryOptions({ idempotencyKey: "k-s4" }))
+      .toMatchObject({ funding: { startAt: "developer" }, idempotencyKey: "k-s4:rail:developer" });
+    expect(plan.reconnects).toEqual([{ kind: "rail_disabled", reason: "user_not_eligible" }]);
+    expect(plan.token).toBeNull();
+  });
+
+  it("leaves the plan connected on a mid-stream refusal without disable", async () => {
+    const plan = new FakePlan("plan-access-token");
+    const { weirgate } = client({ plan }, () => replay("stream_mid_stream_limit"));
+    const stream = await weirgate.streamChat("assistant", hello);
+    const error = await (async () => {
+      for await (const _ of stream.chunks) { /* partial */ }
+    })().catch((caught: unknown) => caught);
+    expect(error).toMatchObject({ disable: false });
+    expect(plan.reconnects).toEqual([]);
+    expect(plan.token).toBe("plan-access-token");
+  });
+
+  it("disconnects nothing when the stream sent no plan token", async () => {
+    const plan = new FakePlan("plan-access-token");
+    const { weirgate, postHeaders } = client({ plan, fundingPreference: { startAt: "developer" } }, () => replay("stream_mid_stream_not_eligible"));
+    const stream = await weirgate.streamChat("assistant", hello);
+    const error = await (async () => {
+      for await (const _ of stream.chunks) { /* partial */ }
+    })().catch((caught: unknown) => caught);
+    expect(error).toMatchObject({ disable: true });
+    expect(postHeaders()[0]?.has("x-weirgate-user-credential")).toBe(false);
+    expect(plan.reconnects).toEqual([]);
+  });
+
   it("refreshes and retries a stream rejected before headers", async () => {
     const plan = new FakePlan("stale-access-token", [{ kind: "refreshed", accessToken: "fresh-access-token" }]);
     const { weirgate, postHeaders } = client({ plan }, (index) => replay(index === 0 ? "credential_expired" : "stream_plan_success"));

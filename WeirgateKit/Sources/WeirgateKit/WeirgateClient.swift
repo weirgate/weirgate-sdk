@@ -150,7 +150,7 @@ public actor WeirgateClient {
         options: RequestOptions = .init()
     ) async throws -> WeirgateResponse<ChatCompletion> {
         let body = try encoder.encode(input)
-        return try await funded(featureID: featureID, body: body, options: options) { request, _ in
+        return try await funded(featureID: featureID, body: body, options: options) { request, _, _ in
             let (data, response) = try await self.performData(request)
             let metadata = try self.responseMetadata(response, includeFunding: true)
             guard (200..<300).contains(response.statusCode) else {
@@ -177,20 +177,28 @@ public actor WeirgateClient {
     /// A streamed chat completion, with the same funding behavior as ``chat(featureID:request:options:)``
     /// before headers. After the stream starts, a rail refusal arrives as the stream's final
     /// error: ``chunks`` throws ``FundingRailError`` (no usage, no `[DONE]`). Discard the
-    /// partial answer and call again with ``FundingRailError/retryOptions(from:)``.
+    /// partial answer and call again with ``FundingRailError/retryOptions(from:)``. When the
+    /// error ``FundingRailError/disablesRail`` for the plan this call sent, the plan is
+    /// disconnected first (``PlanReconnectReason/railDisabled(reason:)``).
     public func streamChat(
         featureID: String,
         request input: ChatCompletionRequest,
         options: RequestOptions = .init()
     ) async throws -> ChatStream {
         let body = try encoder.encode(StreamingChatRequest(request: input))
-        return try await funded(featureID: featureID, body: body, options: options) { request, idempotencyKey in
-            let stream = try await self.openStream(request, idempotencyKey: idempotencyKey)
+        return try await funded(featureID: featureID, body: body, options: options) { request, idempotencyKey, planSource in
+            let stream = try await self.openStream(request, idempotencyKey: idempotencyKey, planSource: planSource)
             return (stream, stream.metadata.funding)
         }
     }
 
-    private func openStream(_ request: URLRequest, idempotencyKey: String) async throws -> ChatStream {
+    /// - Parameter planSource: the plan whose token this request carried, if any. A final
+    ///   error frame that disables the plan rail (`detail.disable`) disconnects it.
+    private func openStream(
+        _ request: URLRequest,
+        idempotencyKey: String,
+        planSource: (any PlanCredentialSource)?
+    ) async throws -> ChatStream {
         let timing = StreamTiming()
         let bytes: URLSession.AsyncBytes
         let rawResponse: URLResponse
@@ -268,7 +276,12 @@ public actor WeirgateClient {
                         serverMessage: frame.message,
                         detail: frame.detail
                     )
-                    continuation.finish(throwing: FundingRailError(error, idempotencyKey: idempotencyKey) ?? error)
+                    let typed = FundingRailError(error, idempotencyKey: idempotencyKey)
+                    // `next_and_disable` mid-stream: stop offering the plan until the user re-consents.
+                    if let planSource, let typed, typed.disablesRail, typed.rail == .userPlan {
+                        await planSource.requireReconnect(.railDisabled(reason: typed.reason))
+                    }
+                    continuation.finish(throwing: typed ?? error)
                 } catch let error as WeirgateSDKError {
                     continuation.finish(throwing: error)
                 } catch {
@@ -294,7 +307,7 @@ public actor WeirgateClient {
         featureID: String,
         body: Data,
         options: RequestOptions,
-        send: (URLRequest, String) async throws -> (Value, FundingOutcome?)
+        send: (URLRequest, String, (any PlanCredentialSource)?) async throws -> (Value, FundingOutcome?)
     ) async throws -> Value {
         var idempotencyKey = options.idempotencyKey ?? UUID().uuidString
         var preference = options.funding ?? fundingPreference
@@ -315,7 +328,7 @@ public actor WeirgateClient {
             }
             if let token { request.setValue(token, forHTTPHeaderField: "X-Weirgate-User-Credential") }
             do {
-                let (value, outcome) = try await send(request, idempotencyKey)
+                let (value, outcome) = try await send(request, idempotencyKey, token == nil ? nil : source)
                 if let source, token != nil, let fallback = outcome?.fallback,
                    fallback.disable, fallback.refusedRail == .userPlan {
                     await source.requireReconnect(.railDisabled(reason: fallback.reason))

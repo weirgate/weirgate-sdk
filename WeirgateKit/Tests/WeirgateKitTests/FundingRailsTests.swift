@@ -424,6 +424,57 @@ func streamMidStreamRefusal() async throws {
     }
 }
 
+@Test("a mid-stream disable flag disconnects the plan the stream was using")
+func streamMidStreamDisable() async throws {
+    let plan = FakePlanSource(token: "plan-access-token")
+    let (client, _, tearDown) = fundingClient(plan: plan) { request, _ in replay("stream_mid_stream_not_eligible", request) }
+    defer { tearDown() }
+    let stream = try await client.streamChat(featureID: "assistant", request: hello, options: .init(idempotencyKey: "k-s4"))
+    do {
+        for try await _ in stream.chunks {}
+        Issue.record("expected the stream to fail")
+    } catch let error as FundingRailError {
+        #expect(error.code == .railRefused)
+        #expect(error.reason == "user_not_eligible")
+        #expect(error.disablesRail)
+        #expect(error.retryOptions()?.funding == .startAt(.developer))
+    }
+    #expect(await plan.reconnects == [.railDisabled(reason: "user_not_eligible")])
+    #expect(await plan.token == nil)
+}
+
+@Test("a mid-stream refusal without disable leaves the plan connected")
+func streamMidStreamNoDisable() async throws {
+    let plan = FakePlanSource(token: "plan-access-token")
+    let (client, _, tearDown) = fundingClient(plan: plan) { request, _ in replay("stream_mid_stream_limit", request) }
+    defer { tearDown() }
+    let stream = try await client.streamChat(featureID: "assistant", request: hello)
+    do {
+        for try await _ in stream.chunks {}
+    } catch let error as FundingRailError {
+        #expect(!error.disablesRail)
+    }
+    #expect(await plan.reconnects.isEmpty)
+    #expect(await plan.token == "plan-access-token")
+}
+
+@Test("a mid-stream disable flag on a stream that sent no plan token disconnects nothing")
+func streamMidStreamDisableWithoutToken() async throws {
+    let plan = FakePlanSource(token: "plan-access-token")
+    let (client, log, tearDown) = fundingClient(plan: plan, preference: .startAt(.developer)) { request, _ in
+        replay("stream_mid_stream_not_eligible", request)
+    }
+    defer { tearDown() }
+    let stream = try await client.streamChat(featureID: "assistant", request: hello)
+    do {
+        for try await _ in stream.chunks {}
+    } catch let error as FundingRailError {
+        #expect(error.disablesRail)
+    }
+    #expect(header(log.posts[0], "X-Weirgate-User-Credential") == nil)
+    #expect(await plan.reconnects.isEmpty)
+}
+
 @Test("a stream rejected before headers refreshes the plan and retries")
 func streamCredentialExpired() async throws {
     let plan = FakePlanSource(token: "stale-access-token", refreshResults: [.refreshed("fresh-access-token")])

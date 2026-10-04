@@ -96,6 +96,11 @@ export class FundingRailError extends WeirgateError {
   /** `plan_limit_exceeded`, `user_not_eligible`, `usage_unavailable`, `unsupported_capability`, `not_connected`, `credential_expired`, `provider_not_approved`, ... */
   readonly reason: string | null;
   readonly nextRail: FundingRail | null;
+  /**
+   * `detail.disable` on a mid-stream refusal (`on_refusal: next_and_disable`): stop offering
+   * `rail` until the user re-consents. For a plan the SDK sent, it already called `requireReconnect`.
+   */
+  readonly disable: boolean;
   readonly providerRequestId: string | null;
   readonly providerCode: string | null;
   /** The idempotency key the failed attempt used (set by the client). */
@@ -108,6 +113,7 @@ export class FundingRailError extends WeirgateError {
     this.provider = stringDetail(this.detail, "provider");
     this.reason = stringDetail(this.detail, "reason");
     this.nextRail = stringDetail(this.detail, "next_rail");
+    this.disable = this.detail?.["disable"] === true;
     this.providerRequestId = stringDetail(this.detail, "provider_request_id");
     this.providerCode = stringDetail(this.detail, "provider_code");
   }
