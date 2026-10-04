@@ -31,9 +31,14 @@ change the frozen contract in this slice.
    `user_plan` (otherwise `invalid_request`), so SDKs must read the catalog before the first
    plan-funded call. Both SDKs cache `funding` from `GET /v1/features` and read it once when
    a feature is unknown.
-8. `detail.next_rail` is always `null` in the 25282cf server, including the mid-stream
-   error frame of a chain that has a later rail. The SDKs implement the documented retry,
-   but it never fires until the server fills `next_rail` for mid-stream refusals.
+8. `detail.next_rail` was always `null` in the 25282cf server, including the mid-stream
+   error frame of a chain that has a later rail. **Fixed in weirgate `0738d89`
+   (weirgate#127):** a mid-stream refusal names the next fundable rail when `on_refusal`
+   moves on, plus `detail.disable` for `next_and_disable`. Before headers it stays `null` by
+   design (the server falls through inside the request), so the SDKs' pre-header
+   `next_rail` retry is forward-compatible and does not fire against today's server.
 9. Retrying with the same idempotency key after `user_credential_expired`, as the contract
-   says, reuses the refunded reservation: the retried request is served, but no usage event
-   is written and it is not metered. Found by recording against the server.
+   says, reused the refunded reservation in 25282cf: the retry was served but not recorded
+   or metered. **Fixed in weirgate `0738d89` (weirgate#127):** a refunded reservation is
+   reopened as a new attempt. The fixtures in `fixtures/funding-rails/` are recorded
+   against `0738d89`.

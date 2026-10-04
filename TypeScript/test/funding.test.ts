@@ -16,16 +16,20 @@ import {
   type PlanReconnectReason,
   type PlanRefreshResult,
 } from "../src/index.js";
-import recorded from "../../fixtures/funding-rails/weirgate-25282cf.json" with { type: "json" };
+import recorded from "../../fixtures/funding-rails/weirgate-0738d89.json" with { type: "json" };
 
 // Funding rails v2, Phase 2. Every server response here was recorded from weirgate main
-// 25282cf running in-process (fixtures/funding-rails/record.mts). OpenAI offers no
+// 0738d89 running in-process (fixtures/funding-rails/record.mts). OpenAI offers no
 // plan-usage sandbox before partner approval, so nothing here reaches a real plan.
 
 interface Recording { response: { status: number; headers: Record<string, string>; body: string } }
 const recordings = recorded as unknown as Record<string, Recording>;
 
-/** A recorded response, optionally with `detail.next_rail` set (allowed by the contract; the 25282cf server always sends null). */
+/**
+ * A recorded response, optionally with `detail.next_rail` set. The server leaves it null
+ * before headers (it falls through inside the request), so tests set it there to exercise
+ * the SDK's retry rule; mid-stream recordings carry the real value.
+ */
 function replay(name: string, nextRail?: string): Response {
   const { status, headers, body } = recordings[name]!.response;
   return new Response(nextRail ? body.replace('"next_rail":null', `"next_rail":"${nextRail}"`) : body, { status, headers });
@@ -291,8 +295,11 @@ describe("streaming", () => {
     expect(stream.funding).toEqual({ rail: "user_plan", provider: "openai_chatgpt", fallback: null });
   });
 
-  it.each([[undefined], ["developer"]])("throws the mid-stream error frame as a typed error (next_rail %s)", async (nextRail) => {
-    const { weirgate } = client({ plan: new FakePlan("plan-access-token") }, () => replay("stream_mid_stream_limit", nextRail));
+  it.each([
+    ["stream_mid_stream_limit_stop", undefined],
+    ["stream_mid_stream_limit", "developer"],
+  ])("throws the mid-stream error frame as a typed error (%s, next_rail %s)", async (recording, nextRail) => {
+    const { weirgate } = client({ plan: new FakePlan("plan-access-token") }, () => replay(recording));
     const stream = await weirgate.streamChat("assistant", hello, { idempotencyKey: "k-s2" });
     let partial = 0;
     const error = await (async () => {
