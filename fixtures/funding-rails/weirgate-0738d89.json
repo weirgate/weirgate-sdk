@@ -1,5 +1,5 @@
 {
-  "source": "weirgate main 25282cf, in-process, OpenAI stubbed with weirgate/test/fixtures; recorded 2026-10-03",
+  "source": "weirgate 0738d89, in-process, OpenAI stubbed with weirgate/test/fixtures; recorded 2026-10-04; usage events added by credential_expired_retry_same_key: 1",
   "catalog": {
     "request": {
       "method": "GET",
@@ -13,7 +13,7 @@
       "headers": {
         "content-type": "application/json; charset=UTF-8",
         "weirgate-api-version": "2026-07-18",
-        "x-weirgate-request-id": "req_0b202613-ad0e-4f3b-af44-b32a48b7657e"
+        "x-weirgate-request-id": "req_6415f184-08bf-461a-b48c-914bd2089c23"
       },
       "body": "{\"catalog_version\":\"cat_0_8a7d43943fdbb8f1\",\"data\":[{\"feature_id\":\"assistant\",\"modality\":\"chat\",\"key_policy\":\"user_or_developer\",\"funding\":{\"order\":[\"user_plan\",\"developer\"],\"plan_providers\":[\"openai_chatgpt\"]},\"display_label\":\"Assistant\",\"availability\":{\"available\":true,\"reason\":null},\"provider_policy\":{\"effective_state\":\"allowed\"}},{\"feature_id\":\"assistant-stop\",\"modality\":\"chat\",\"key_policy\":\"user_or_developer\",\"funding\":{\"order\":[\"user_plan\",\"developer\"],\"plan_providers\":[\"openai_chatgpt\"]},\"display_label\":\"Strict\",\"availability\":{\"available\":true,\"reason\":null},\"provider_policy\":{\"effective_state\":\"allowed\"}},{\"feature_id\":\"summaries\",\"modality\":\"chat\",\"key_policy\":\"developer\",\"funding\":{\"order\":[\"developer\"],\"plan_providers\":[]},\"display_label\":\"Summaries\",\"availability\":{\"available\":true,\"reason\":null},\"provider_policy\":{\"effective_state\":\"allowed\"}}]}"
     }
@@ -37,7 +37,7 @@
         "weirgate-api-version": "2026-07-18",
         "x-credits-remaining": "5",
         "x-weirgate-funding-rail": "user_plan; provider=openai_chatgpt",
-        "x-weirgate-request-id": "req_dafff9c8-70ea-4296-9b04-668395a112d0"
+        "x-weirgate-request-id": "req_bbcda403-1214-49dc-9fe2-b3a14fbc1aba"
       },
       "body": "{\"id\":\"resp_plan_redacted\",\"object\":\"chat.completion\",\"model\":\"gpt-plan-live-redacted\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"plan-1 plan-2 plan-3\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":41,\"completion_tokens\":9,\"total_tokens\":50,\"model\":\"gpt-plan-live-redacted\"}}"
     }
@@ -62,7 +62,7 @@
         "x-credits-remaining": "4",
         "x-weirgate-funding-fallback": "user_plan; reason=plan_limit_exceeded",
         "x-weirgate-funding-rail": "developer",
-        "x-weirgate-request-id": "req_95effff5-0154-4acf-a407-da7dc966ef54"
+        "x-weirgate-request-id": "req_9644d5ac-7da9-44b3-9bbb-21275abe3991"
       },
       "body": "{\"id\":\"or-dev\",\"object\":\"chat.completion\",\"model\":\"mock/routed\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"developer paid\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":2,\"total_tokens\":5,\"cost\":0.0002,\"model\":\"mock/routed\",\"finish_reason\":\"stop\"}}"
     }
@@ -87,7 +87,7 @@
         "x-credits-remaining": "3",
         "x-weirgate-funding-fallback": "user_plan; reason=user_not_eligible; disable",
         "x-weirgate-funding-rail": "developer",
-        "x-weirgate-request-id": "req_abbf09fb-5c26-4544-b71b-c07fbb65d654"
+        "x-weirgate-request-id": "req_94d0d4c9-2281-4d5f-b310-1d163278b8ea"
       },
       "body": "{\"id\":\"or-dev\",\"object\":\"chat.completion\",\"model\":\"mock/routed\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"developer paid\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":2,\"total_tokens\":5,\"cost\":0.0002,\"model\":\"mock/routed\",\"finish_reason\":\"stop\"}}"
     }
@@ -110,9 +110,9 @@
         "content-type": "application/json",
         "weirgate-api-version": "2026-07-18",
         "x-weirgate-error-type": "user_credential_expired",
-        "x-weirgate-request-id": "req_61685bfc-345b-4c78-8632-610d3cfe5d03"
+        "x-weirgate-request-id": "req_68283375-dc8f-4e89-88f7-017d261a52e1"
       },
-      "body": "{\"error\":{\"type\":\"user_credential_expired\",\"message\":\"the plan credential was rejected; refresh it and retry\",\"request_id\":\"req_61685bfc-345b-4c78-8632-610d3cfe5d03\",\"detail\":{\"next_rail\":null,\"rail\":\"user_plan\",\"provider\":\"openai_chatgpt\",\"reason\":\"credential_expired\",\"provider_request_id\":\"oai-req-123\",\"provider_code\":\"subscription_sharing_invalid_user\"}}}"
+      "body": "{\"error\":{\"type\":\"user_credential_expired\",\"message\":\"the plan credential was rejected; refresh it and retry\",\"request_id\":\"req_68283375-dc8f-4e89-88f7-017d261a52e1\",\"detail\":{\"next_rail\":null,\"rail\":\"user_plan\",\"provider\":\"openai_chatgpt\",\"reason\":\"credential_expired\",\"provider_request_id\":\"oai-req-123\",\"provider_code\":\"subscription_sharing_invalid_user\"}}}"
     }
   },
   "credential_expired_retry_same_key": {
@@ -134,7 +134,7 @@
         "weirgate-api-version": "2026-07-18",
         "x-credits-remaining": "5",
         "x-weirgate-funding-rail": "user_plan; provider=openai_chatgpt",
-        "x-weirgate-request-id": "req_0c5a5f1e-baea-47b2-9a82-949a2d57204d"
+        "x-weirgate-request-id": "req_3c0e9f4a-2a4d-454c-a280-f81d6c928f90"
       },
       "body": "{\"id\":\"resp_plan_redacted\",\"object\":\"chat.completion\",\"model\":\"gpt-plan-live-redacted\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"plan-1 plan-2 plan-3\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":41,\"completion_tokens\":9,\"total_tokens\":50,\"model\":\"gpt-plan-live-redacted\"}}"
     }
@@ -157,9 +157,9 @@
         "content-type": "application/json",
         "weirgate-api-version": "2026-07-18",
         "x-weirgate-error-type": "funding_rail_refused",
-        "x-weirgate-request-id": "req_0df3aac6-dd33-4106-94b8-8bbc9c148147"
+        "x-weirgate-request-id": "req_ab5874f7-5c97-4cdd-914a-ec357e4069ba"
       },
-      "body": "{\"error\":{\"type\":\"funding_rail_refused\",\"message\":\"the user's plan usage for this app is exhausted\",\"request_id\":\"req_0df3aac6-dd33-4106-94b8-8bbc9c148147\",\"detail\":{\"next_rail\":null,\"rail\":\"user_plan\",\"provider\":\"openai_chatgpt\",\"reason\":\"plan_limit_exceeded\",\"provider_request_id\":\"oai-req-123\",\"provider_code\":\"subscription_sharing_usage_limit_exceeded\"}}}"
+      "body": "{\"error\":{\"type\":\"funding_rail_refused\",\"message\":\"the user's plan usage for this app is exhausted\",\"request_id\":\"req_ab5874f7-5c97-4cdd-914a-ec357e4069ba\",\"detail\":{\"next_rail\":null,\"rail\":\"user_plan\",\"provider\":\"openai_chatgpt\",\"reason\":\"plan_limit_exceeded\",\"provider_request_id\":\"oai-req-123\",\"provider_code\":\"subscription_sharing_usage_limit_exceeded\"}}}"
     }
   },
   "rail_unavailable_not_approved": {
@@ -180,9 +180,9 @@
         "content-type": "application/json",
         "weirgate-api-version": "2026-07-18",
         "x-weirgate-error-type": "funding_rail_unavailable",
-        "x-weirgate-request-id": "req_5418d133-9c0c-44a2-9e58-e9bbd3f6c239"
+        "x-weirgate-request-id": "req_1a3ef703-3895-4997-9127-1293d37bee3a"
       },
-      "body": "{\"error\":{\"type\":\"funding_rail_unavailable\",\"message\":\"plan usage is not approved for this app outside sandbox\",\"request_id\":\"req_5418d133-9c0c-44a2-9e58-e9bbd3f6c239\",\"detail\":{\"rail\":\"user_plan\",\"provider\":\"openai_chatgpt\",\"reason\":\"provider_not_approved\",\"next_rail\":null}}}"
+      "body": "{\"error\":{\"type\":\"funding_rail_unavailable\",\"message\":\"plan usage is not approved for this app outside sandbox\",\"request_id\":\"req_1a3ef703-3895-4997-9127-1293d37bee3a\",\"detail\":{\"rail\":\"user_plan\",\"provider\":\"openai_chatgpt\",\"reason\":\"provider_not_approved\",\"next_rail\":null}}}"
     }
   },
   "credential_on_developer_feature": {
@@ -203,9 +203,9 @@
         "content-type": "application/json",
         "weirgate-api-version": "2026-07-18",
         "x-weirgate-error-type": "invalid_request",
-        "x-weirgate-request-id": "req_a372e59a-4890-4dcc-afad-7481c4940ed9"
+        "x-weirgate-request-id": "req_a263e806-2653-4e08-b486-ac29b1d97fee"
       },
-      "body": "{\"error\":{\"type\":\"invalid_request\",\"message\":\"this feature does not accept an end-user plan credential\",\"request_id\":\"req_a372e59a-4890-4dcc-afad-7481c4940ed9\"}}"
+      "body": "{\"error\":{\"type\":\"invalid_request\",\"message\":\"this feature does not accept an end-user plan credential\",\"request_id\":\"req_a263e806-2653-4e08-b486-ac29b1d97fee\"}}"
     }
   },
   "stream_plan_success": {
@@ -227,7 +227,7 @@
         "weirgate-api-version": "2026-07-18",
         "x-credits-remaining": "3",
         "x-weirgate-funding-rail": "user_plan; provider=openai_chatgpt",
-        "x-weirgate-request-id": "req_aa5ff41a-05ba-4f1f-a8f5-583c807dc937"
+        "x-weirgate-request-id": "req_f5e02ae4-38eb-4c93-b12e-3d0844a7c7e6"
       },
       "body": "data: {\"id\":\"resp_plan_redacted\",\"object\":\"chat.completion.chunk\",\"model\":\"gpt-plan-live-redacted\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"plan-1 \"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"resp_plan_redacted\",\"object\":\"chat.completion.chunk\",\"model\":\"gpt-plan-live-redacted\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"plan-2 \"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"resp_plan_redacted\",\"object\":\"chat.completion.chunk\",\"model\":\"gpt-plan-live-redacted\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"plan-3\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"resp_plan_redacted\",\"object\":\"chat.completion.chunk\",\"model\":\"gpt-plan-live-redacted\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":41,\"completion_tokens\":9,\"total_tokens\":50,\"model\":\"gpt-plan-live-redacted\"}}\n\ndata: [DONE]\n\n"
     }
@@ -251,9 +251,33 @@
         "weirgate-api-version": "2026-07-18",
         "x-credits-remaining": "3",
         "x-weirgate-funding-rail": "user_plan; provider=openai_chatgpt",
-        "x-weirgate-request-id": "req_263f81ad-73bd-4ff9-b4ee-79bd393c4bf2"
+        "x-weirgate-request-id": "req_da7c5d3b-e333-4ceb-b822-f0196ff053b8"
       },
-      "body": "data: {\"id\":\"resp_plan_limit_redacted\",\"object\":\"chat.completion.chunk\",\"model\":\"gpt-plan-live-redacted\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"partial \"},\"finish_reason\":null}]}\n\ndata: {\"error\":{\"type\":\"funding_rail_refused\",\"message\":\"the user's plan usage for this app is exhausted\",\"request_id\":\"req_263f81ad-73bd-4ff9-b4ee-79bd393c4bf2\",\"detail\":{\"next_rail\":null,\"rail\":\"user_plan\",\"provider\":\"openai_chatgpt\",\"reason\":\"plan_limit_exceeded\",\"provider_request_id\":\"oai-req-123\",\"provider_code\":\"subscription_sharing_usage_limit_exceeded\"}}}\n\n"
+      "body": "data: {\"id\":\"resp_plan_limit_redacted\",\"object\":\"chat.completion.chunk\",\"model\":\"gpt-plan-live-redacted\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"partial \"},\"finish_reason\":null}]}\n\ndata: {\"error\":{\"type\":\"funding_rail_refused\",\"message\":\"the user's plan usage for this app is exhausted\",\"request_id\":\"req_da7c5d3b-e333-4ceb-b822-f0196ff053b8\",\"detail\":{\"next_rail\":\"developer\",\"rail\":\"user_plan\",\"provider\":\"openai_chatgpt\",\"reason\":\"plan_limit_exceeded\",\"provider_request_id\":\"oai-req-123\",\"provider_code\":\"subscription_sharing_usage_limit_exceeded\"}}}\n\n"
+    }
+  },
+  "stream_mid_stream_limit_stop": {
+    "request": {
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "headers": {
+        "X-App-Id": "example-app",
+        "X-Feature-Id": "assistant-stop",
+        "Content-Type": "application/json",
+        "X-Weirgate-User-Credential": "plan-access-token",
+        "X-Idempotency-Key": "k-s3"
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "text/event-stream",
+        "weirgate-api-version": "2026-07-18",
+        "x-credits-remaining": "3",
+        "x-weirgate-funding-rail": "user_plan; provider=openai_chatgpt",
+        "x-weirgate-request-id": "req_5f26ee09-73eb-4156-b210-e8093091dfb4"
+      },
+      "body": "data: {\"id\":\"resp_plan_limit_redacted\",\"object\":\"chat.completion.chunk\",\"model\":\"gpt-plan-live-redacted\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"partial \"},\"finish_reason\":null}]}\n\ndata: {\"error\":{\"type\":\"funding_rail_refused\",\"message\":\"the user's plan usage for this app is exhausted\",\"request_id\":\"req_5f26ee09-73eb-4156-b210-e8093091dfb4\",\"detail\":{\"next_rail\":null,\"rail\":\"user_plan\",\"provider\":\"openai_chatgpt\",\"reason\":\"plan_limit_exceeded\",\"provider_request_id\":\"oai-req-123\",\"provider_code\":\"subscription_sharing_usage_limit_exceeded\"}}}\n\n"
     }
   },
   "start_at_developer": {
@@ -276,7 +300,7 @@
         "weirgate-api-version": "2026-07-18",
         "x-credits-remaining": "2",
         "x-weirgate-funding-rail": "developer",
-        "x-weirgate-request-id": "req_ebdb495a-41f4-4188-a89a-d62198f9cd7d"
+        "x-weirgate-request-id": "req_27b97ad7-a381-4405-aa67-c98726e2bbb4"
       },
       "body": "{\"id\":\"or-dev\",\"object\":\"chat.completion\",\"model\":\"mock/routed\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"developer paid\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":2,\"total_tokens\":5,\"cost\":0.0002,\"model\":\"mock/routed\",\"finish_reason\":\"stop\"}}"
     }

@@ -6,7 +6,7 @@ import Testing
 @testable import WeirgateKit
 
 // Funding rails v2, Phase 2. Every server response here was recorded from weirgate main
-// 25282cf running in-process (fixtures/funding-rails/record.mts). OpenAI offers no
+// 0738d89 running in-process (fixtures/funding-rails/record.mts). OpenAI offers no
 // plan-usage sandbox before partner approval, so nothing here reaches a real plan.
 
 // MARK: - Recorded fixtures
@@ -23,15 +23,16 @@ private struct Recorded: Decodable {
 private let recordings: [String: Recorded] = {
     let url = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        .appendingPathComponent("fixtures/funding-rails/weirgate-25282cf.json")
+        .appendingPathComponent("fixtures/funding-rails/weirgate-0738d89.json")
     let data = try! Data(contentsOf: url)
     var object = try! JSONSerialization.jsonObject(with: data) as! [String: Any]
     object["source"] = nil
     return try! JSONDecoder().decode([String: Recorded].self, from: JSONSerialization.data(withJSONObject: object))
 }()
 
-/// A recorded response, optionally with its error `detail.next_rail` set (the contract
-/// allows it; the 25282cf server always sends null, see the README).
+/// A recorded response, optionally with its error `detail.next_rail` set. The server
+/// leaves it null before headers (it falls through inside the request), so the tests set
+/// it there to exercise the SDK's retry rule; mid-stream recordings carry the real value.
 private func replay(_ name: String, _ request: URLRequest, nextRail: String? = nil) -> (HTTPURLResponse, Data) {
     let recorded = recordings[name]!.response
     var body = recorded.body
@@ -397,9 +398,9 @@ func streamPlanSuccess() async throws {
 
 @Test("the mid-stream error frame throws a typed FundingRailError after the partial chunks")
 func streamMidStreamRefusal() async throws {
-    for nextRail in [nil, "developer"] as [String?] {
+    for (recording, nextRail) in [("stream_mid_stream_limit_stop", nil), ("stream_mid_stream_limit", "developer")] as [(String, String?)] {
         let plan = FakePlanSource(token: "plan-access-token")
-        let (client, _, tearDown) = fundingClient(plan: plan) { request, _ in replay("stream_mid_stream_limit", request, nextRail: nextRail) }
+        let (client, _, tearDown) = fundingClient(plan: plan) { request, _ in replay(recording, request) }
         defer { tearDown() }
         let stream = try await client.streamChat(featureID: "assistant", request: hello, options: .init(idempotencyKey: "k-s2"))
         var partial = 0

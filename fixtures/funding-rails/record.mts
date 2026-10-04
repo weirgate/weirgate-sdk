@@ -3,6 +3,7 @@
 // OpenAI's documented plan-usage shapes (no plan-usage sandbox exists before partner approval).
 // Not part of either SDK package. Usage, from the weirgate checkout:
 //   node_modules/.bin/tsx ../weirgate-sdk/fixtures/funding-rails/record.mts out.json
+import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 const W = process.env.WEIRGATE_DIR ?? process.cwd();
 const { createApp } = await import(`${W}/src/app.ts`);
@@ -105,10 +106,14 @@ await rec("rail_unavailable_not_approved", { app: "pending-app", credential: "pl
 await rec("credential_on_developer_feature", { feature: "summaries", credential: "plan-access-token", key: "k-dev" });
 await rec("stream_plan_success", { credential: "plan-access-token", key: "k-s1", stream: true }, [() => planStream()]);
 await rec("stream_mid_stream_limit", { credential: "plan-access-token", key: "k-s2", stream: true }, [() => planStream("openai-responses-plan-stream-limit.sse")]);
+await rec("stream_mid_stream_limit_stop", { feature: "assistant-stop", credential: "plan-access-token", key: "k-s3", stream: true }, [() => planStream("openai-responses-plan-stream-limit.sse")]);
 await rec("start_at_developer", { credential: "plan-access-token", funding: "developer", key: "k-startdev" });
 
+const commit = execFileSync("git", ["-C", W, "rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();
+const day = new Date().toISOString().slice(0, 10);
 writeFileSync(process.argv[2]!, `${JSON.stringify({
-  source: "weirgate main 25282cf, in-process, OpenAI stubbed with weirgate/test/fixtures; recorded 2026-10-03",
+  source: `weirgate ${commit}, in-process, OpenAI stubbed with weirgate/test/fixtures; recorded ${day}; `
+    + `usage events added by credential_expired_retry_same_key: ${after - before}`,
   ...recorded,
 }, null, 2)}\n`);
-console.log(JSON.stringify({ usageEventsAddedBySameKeyRetry: after - before }));
+console.log(JSON.stringify({ commit, usageEventsAddedBySameKeyRetry: after - before }));
