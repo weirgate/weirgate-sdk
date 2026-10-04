@@ -879,7 +879,7 @@ export interface paths {
         put?: never;
         /**
          * Grant units idempotently
-         * @description X-Idempotency-Key is canonical; body idempotency_key is a deprecated compatibility alias. Requires the credits or billing tool group. A reused key with the same body returns the original grant; the same key with a different body returns resource_conflict. Clerk dashboard sessions require recent second-factor verification.
+         * @description X-Idempotency-Key is canonical; body idempotency_key is a deprecated compatibility alias. Requires apply scope and the credits tool group. A reused key with the same body returns the original grant; the same key with a different body returns resource_conflict. Clerk dashboard sessions require recent second-factor verification.
          */
         post: operations["createGrant"];
         delete?: never;
@@ -924,13 +924,13 @@ export interface paths {
         get?: never;
         /**
          * Schedule a configured tier for an app user
-         * @description Creates the user when externalId is unknown, matching the grant endpoint. The assigned tier becomes active on that user's first lazy allowance grant in the next UTC calendar month. Exception: assigning an unlimited tier, or any change while the active tier is unlimited, takes effect immediately. expires_at (optional, RFC 3339, in the future and after the assignment takes effect) ends the assignment; when omitted it defaults to the start plus the tier's default_duration_days, if set, and otherwise the assignment is open-ended. An ended assignment returns the user to the app's default tier on the next balance read or metered request (and at the end time for idle users), recorded as an expire change with a tier.expired webhook; tier.expiring is sent expiry_notice_days (default 3) before. top_up_now additionally grants only the positive, not-yet-credited difference between the active and target monthly allowances for the current UTC month; downgrades never claw back units. Replays with the same X-Idempotency-Key do not repeat the mutation, audit event, or top-up.
+         * @description Creates the user when externalId is unknown, matching the grant endpoint. The assigned tier becomes active on that user's first lazy allowance grant in the next UTC calendar month. Exception: assigning an unlimited tier, or any change while the active tier is unlimited, takes effect immediately. expires_at (optional, RFC 3339, in the future and after the assignment takes effect) ends the assignment; when omitted it defaults to the start plus the tier's default_duration_days, if set, and otherwise the assignment is open-ended. An ended assignment returns the user to the app's default tier on the next balance read or metered request (and at the end time for idle users), recorded as an expire change with a tier.expired webhook; tier.expiring is sent expiry_notice_days (default 3) before. top_up_now additionally grants only the positive, not-yet-credited difference between the active and target monthly allowances for the current UTC month; downgrades never claw back units. Replays with the same X-Idempotency-Key do not repeat the mutation, audit event, or top-up. Requires apply scope and the plans tool group. Clerk dashboard sessions require recent second-factor verification.
          */
         put: operations["assignUserTier"];
         post?: never;
         /**
          * Schedule a user to return to the app default tier
-         * @description Creates the user when externalId is unknown, matching the grant endpoint, and schedules the app's current default tier for the next UTC calendar month. When the active tier is unlimited the revert takes effect immediately. top_up_now follows the same positive-delta, no-clawback semantics as assignment. Clerk dashboard sessions require recent second-factor verification.
+         * @description Creates the user when externalId is unknown, matching the grant endpoint, and schedules the app's current default tier for the next UTC calendar month. When the active tier is unlimited the revert takes effect immediately. top_up_now follows the same positive-delta, no-clawback semantics as assignment. Requires apply scope and the plans tool group. Clerk dashboard sessions require recent second-factor verification.
          */
         delete: operations["revertUserTier"];
         options?: never;
@@ -949,7 +949,7 @@ export interface paths {
         put?: never;
         /**
          * Reverse a grant idempotently
-         * @description Requires the credits or billing tool group. A reversal may take the balance negative when the credits were already spent. Reversing an already reversed grant returns it unchanged; an unknown grantId returns resource_not_found. Clerk dashboard sessions require recent second-factor verification.
+         * @description Requires apply scope and the credits tool group. A reversal may take the balance negative when the credits were already spent. Reversing an already reversed grant returns it unchanged; an unknown grantId returns resource_not_found. Clerk dashboard sessions require recent second-factor verification.
          */
         post: operations["reverseGrant"];
         delete?: never;

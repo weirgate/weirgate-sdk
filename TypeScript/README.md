@@ -45,8 +45,10 @@ Server failures are `WeirgateError` values keyed by `error.type`, never message 
 Every result and error carries `requestId` and `apiVersion` correlation metadata.
 
 Server-side management clients can schedule a configured per-user tier with an admin
-key. The change activates at the next UTC monthly grant period; `top_up_now` grants only
-the positive current-period allowance delta:
+key that has apply scope and the `plans` tool group (a credits-only key can't change
+tiers, and `billing` no longer works here). The change activates at the next UTC
+monthly grant period; `top_up_now` grants only the positive current-period allowance
+delta:
 
 ```ts
 const admin = new Weirgate({ adminKey: process.env.WEIRGATE_API_KEY });
