@@ -11,7 +11,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read process health and runtime mode */
+        /**
+         * Read process liveness and runtime mode
+         * @description Liveness only. The check never queries the database, so health polling cannot keep the database awake; database failures surface on API requests instead.
+         */
         get: operations["getHealth"];
         put?: never;
         post?: never;
@@ -770,7 +773,10 @@ export interface paths {
         /** List webhook metadata without secrets */
         get: operations["listWebhooks"];
         put?: never;
-        /** Register a webhook and reveal its signing secret once */
+        /**
+         * Register a webhook and reveal its signing secret once
+         * @description Requires apply scope and the webhooks tool group; a Clerk developer session needs a recent second factor. The whsec_ signing secret is returned only in this response.
+         */
         post: operations["createWebhook"];
         delete?: never;
         options?: never;
@@ -804,7 +810,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Replay a delivery while retaining the event id */
+        /**
+         * Replay a delivery while retaining the event id
+         * @description Requires apply scope and the webhooks tool group. Re-sends the stored event to the endpoint it was addressed to; no second factor is needed for a Clerk developer session.
+         */
         post: operations["replayWebhookDelivery"];
         delete?: never;
         options?: never;
@@ -825,11 +834,17 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete a webhook endpoint */
+        /**
+         * Delete a webhook endpoint
+         * @description Requires apply scope and the webhooks tool group; a Clerk developer session needs a recent second factor.
+         */
         delete: operations["deleteWebhook"];
         options?: never;
         head?: never;
-        /** Update webhook URL, event registry, or enabled state */
+        /**
+         * Update webhook URL, event registry, or enabled state
+         * @description Requires apply scope and the webhooks tool group; a Clerk developer session needs a recent second factor.
+         */
         patch: operations["updateWebhook"];
         trace?: never;
     };
@@ -842,7 +857,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Rotate and reveal a webhook signing secret once */
+        /**
+         * Rotate and reveal a webhook signing secret once
+         * @description Requires apply scope and the webhooks tool group; a Clerk developer session needs a recent second factor. The new whsec_ signing secret is returned only in this response; the previous one stops working immediately.
+         */
         post: operations["rotateWebhookSecret"];
         delete?: never;
         options?: never;
@@ -906,7 +924,7 @@ export interface paths {
         get?: never;
         /**
          * Schedule a configured tier for an app user
-         * @description Creates the user when externalId is unknown, matching the grant endpoint. The assigned tier becomes active on that user's first lazy allowance grant in the next UTC calendar month. Exception: assigning an unlimited tier, or any change while the active tier is unlimited, takes effect immediately. expires_at (optional, RFC 3339, in the future and after the assignment takes effect) ends the assignment; when omitted it defaults to the start plus the tier's default_duration_days, if set, and otherwise the assignment is open-ended. An ended assignment returns the user to the app's default tier on the next balance read or metered request (and on the minute sweep), recorded as an expire change with a tier.expired webhook; tier.expiring is sent expiry_notice_days (default 3) before. top_up_now additionally grants only the positive, not-yet-credited difference between the active and target monthly allowances for the current UTC month; downgrades never claw back units. Replays with the same X-Idempotency-Key do not repeat the mutation, audit event, or top-up.
+         * @description Creates the user when externalId is unknown, matching the grant endpoint. The assigned tier becomes active on that user's first lazy allowance grant in the next UTC calendar month. Exception: assigning an unlimited tier, or any change while the active tier is unlimited, takes effect immediately. expires_at (optional, RFC 3339, in the future and after the assignment takes effect) ends the assignment; when omitted it defaults to the start plus the tier's default_duration_days, if set, and otherwise the assignment is open-ended. An ended assignment returns the user to the app's default tier on the next balance read or metered request (and at the end time for idle users), recorded as an expire change with a tier.expired webhook; tier.expiring is sent expiry_notice_days (default 3) before. top_up_now additionally grants only the positive, not-yet-credited difference between the active and target monthly allowances for the current UTC month; downgrades never claw back units. Replays with the same X-Idempotency-Key do not repeat the mutation, audit event, or top-up.
          */
         put: operations["assignUserTier"];
         post?: never;
@@ -1723,20 +1741,6 @@ export interface components {
             ok: true;
             /** @enum {string} */
             mode: "mock" | "live";
-            checks: {
-                /** @constant */
-                database: "ok";
-            };
-        };
-        ReadinessFailure: {
-            /** @constant */
-            ok: false;
-            /** @enum {string} */
-            mode: "mock" | "live";
-            checks: {
-                /** @constant */
-                database: "unavailable";
-            };
         };
         Accepted: {
             /** @constant */
@@ -4088,7 +4092,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Process and database are ready */
+            /** @description Process is running */
             200: {
                 headers: {
                     "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
@@ -4097,17 +4101,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Health"];
-                };
-            };
-            /** @description Process is running but the database is unavailable */
-            503: {
-                headers: {
-                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
-                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReadinessFailure"];
                 };
             };
         };
