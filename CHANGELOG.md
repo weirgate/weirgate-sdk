@@ -2,6 +2,13 @@
 
 All notable public SDK changes are recorded here.
 
+## Unreleased
+
+- Docs only, no code change: `assignUserTier` / `revertUserTier` need an admin key with
+  the `plans` tool group, and `createGrant` / `reverseGrant` need `credits`; weirgate
+  `b5d3702` (#122) no longer accepts `billing` for either. Spec provenance moves to
+  weirgate `b5d3702` (generated description text only).
+
 ## @weirgate/sdk 0.4.0 — 2026-10-04
 
 - TypeScript: `Health` is now `{ ok: true; mode }`. weirgate `0970c08` made `/healthz` a
