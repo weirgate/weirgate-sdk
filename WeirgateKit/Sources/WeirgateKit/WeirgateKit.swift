@@ -1,9 +1,9 @@
 import Foundation
 
 public enum WeirgateKitInfo {
-    public static let version = "0.4.0"
+    public static let version = "0.4.1"
     public static let apiVersion = "2026-07-18"
-    public static let specSourceCommit = "25282cf16aa367fd77cbd0bc3fd89c799a18e59b"
+    public static let specSourceCommit = "0738d89c371ca47412ec463a843766edfd7c75dc"
 }
 
 public struct WeirgateTokenProvider: Sendable {

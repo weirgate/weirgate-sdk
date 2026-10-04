@@ -2,7 +2,7 @@
 
 All notable public SDK changes are recorded here.
 
-## Unreleased
+## @weirgate/sdk 0.3.1 and WeirgateKit 0.4.1 — 2026-10-03
 
 - Both SDKs read `detail.disable` on a stream's final error frame, which weirgate sends
   for a mid-stream refusal under `on_refusal: next_and_disable` (weirgate `0738d89`). When
@@ -12,6 +12,8 @@ All notable public SDK changes are recorded here.
   `FundingRailError.disablesRail` (Swift) and `FundingRailError.disable` (TypeScript).
 - Test fixtures are recorded against weirgate `0738d89`, with mid-stream recordings for
   `next_and_disable` and `stop`.
+- Spec provenance moves to weirgate `0738d89` (contract text only: when `next_rail` is set
+  mid-stream, and that a same-key retry after a refunded attempt is a new, metered attempt).
 
 ## @weirgate/sdk 0.3.0 and WeirgateKit 0.4.0 — 2026-10-03
 
