@@ -2,12 +2,13 @@
 
 All notable public SDK changes are recorded here.
 
-## Unreleased
+## @weirgate/sdk 0.4.0 — 2026-10-04
 
 - TypeScript: `Health` is now `{ ok: true; mode }`. weirgate `0970c08` made `/healthz` a
   liveness check that never queries the database, so `checks.database` and the 503
   `ReadinessFailure` response are gone from the contract. `health()` callers that read
-  `checks` should drop it; WeirgateKit already decoded only `ok` and `mode`.
+  `checks` should drop it. This removes a response field, so it ships as a minor version
+  (0.x); WeirgateKit already decoded only `ok` and `mode` and is unchanged.
 - Spec provenance moves to weirgate `0970c08` (also picks up contract text for dashboard
   sessions on the webhook routes and the tier-expiry wording).
 
