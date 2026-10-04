@@ -104,7 +104,7 @@ The client applies the funding retry rules for `chat`, `streamChat`, and `embedd
 | `funding_rail_refused` without `next_rail` | Throws `FundingRailRefusedError` (`rail`, `reason`, `providerRequestId`) |
 | `funding_rail_unavailable` (403) | Throws `FundingRailUnavailableError`; a configuration problem, not retried |
 | `X-Weirgate-Funding-Fallback: user_plan; …; disable` on a success | Returns the result and calls `requireReconnect({ kind: "rail_disabled" })` |
-| Stream ends with `data: {"error": …}` | `chunks` throws `FundingRailRefusedError` after the partial chunks. Discard the partial answer and call again with `error.retryOptions(options)` when it is not null |
+| Stream ends with `data: {"error": …}` | `chunks` throws `FundingRailRefusedError` after the partial chunks. Discard the partial answer and call again with `error.retryOptions(options)` when it is not null. If the frame has `detail.disable` (`error.disable`) for the plan the stream used, `requireReconnect({ kind: "rail_disabled" })` is called first |
 
 `fundingPreference` (client option, or `funding` per call) picks where the chain starts:
 `"server_chain"` (default) or `{ startAt: "developer" }` to skip the user's plan.

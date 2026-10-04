@@ -186,6 +186,12 @@ public struct FundingRailError: LocalizedError, WeirgateCorrelatedError, Sendabl
     /// `provider_not_approved`, `provider_not_accepted`, `provider_rejected_route`, ...
     public var reason: String? { underlying?.reason }
     public var nextRail: FundingRail? { underlying?.stringDetail("next_rail").map(FundingRail.init(rawValue:)) }
+    /// `detail.disable` on a mid-stream refusal (`on_refusal: next_and_disable`): stop offering
+    /// ``rail`` until the user re-consents. For a plan the SDK sent, it already disconnected it.
+    public var disablesRail: Bool {
+        if case .bool(true) = underlying?.detail?["disable"] { return true }
+        return false
+    }
     /// The plan provider's request ID; keep it for support, as OpenAI's recovery guide asks.
     public var providerRequestID: String? { underlying?.stringDetail("provider_request_id") }
     public var providerCode: String? { underlying?.stringDetail("provider_code") }

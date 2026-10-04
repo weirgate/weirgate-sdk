@@ -50,8 +50,11 @@ let script: Array<() => Response> = [];
 const catalog = () => Response.json({ models: [{ slug: "gpt-plan-pro", visibility: "list" }] });
 const planError = (status: number, code: string) =>
   new Response(JSON.stringify({ error: { code, message: "refused" } }), { status, headers: { "x-request-id": "oai-req-123" } });
-const planStream = (name = "openai-responses-plan-stream.sse") =>
-  new Response(fixture(name), { headers: { "Content-Type": "text/event-stream", "x-request-id": "oai-req-123" } });
+/** A recorded OpenAI stream; `failureCode` swaps the mid-stream failure's error code. */
+const planStream = (name = "openai-responses-plan-stream.sse", failureCode?: string) => new Response(
+  failureCode ? fixture(name).replace("subscription_sharing_usage_limit_exceeded", failureCode) : fixture(name),
+  { headers: { "Content-Type": "text/event-stream", "x-request-id": "oai-req-123" } },
+);
 globalThis.fetch = (async (url: string) => {
   if (url === OPENAI_PLAN_MODELS_URL) return catalog();
   if (url === "https://openrouter.ai/api/v1/chat/completions") return Response.json({
@@ -106,6 +109,7 @@ await rec("rail_unavailable_not_approved", { app: "pending-app", credential: "pl
 await rec("credential_on_developer_feature", { feature: "summaries", credential: "plan-access-token", key: "k-dev" });
 await rec("stream_plan_success", { credential: "plan-access-token", key: "k-s1", stream: true }, [() => planStream()]);
 await rec("stream_mid_stream_limit", { credential: "plan-access-token", key: "k-s2", stream: true }, [() => planStream("openai-responses-plan-stream-limit.sse")]);
+await rec("stream_mid_stream_not_eligible", { credential: "plan-access-token", key: "k-s4", stream: true }, [() => planStream("openai-responses-plan-stream-limit.sse", "subscription_sharing_user_not_eligible")]);
 await rec("stream_mid_stream_limit_stop", { feature: "assistant-stop", credential: "plan-access-token", key: "k-s3", stream: true }, [() => planStream("openai-responses-plan-stream-limit.sse")]);
 await rec("start_at_developer", { credential: "plan-access-token", funding: "developer", key: "k-startdev" });
 

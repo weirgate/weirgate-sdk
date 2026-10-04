@@ -187,7 +187,8 @@ export class Weirgate {
    * A streamed chat completion with `chat`'s funding behavior before headers. After the
    * stream starts, a rail refusal is the stream's final frame: `chunks` throws a
    * `FundingRailRefusedError` (no usage, no `[DONE]`). Discard the partial answer and call
-   * again with `error.retryOptions(options)`.
+   * again with `error.retryOptions(options)`. When `error.disable` is set for the plan this
+   * call sent, `requireReconnect({ kind: "rail_disabled" })` has already been called.
    */
   async streamChat(
     featureId: string,
@@ -195,7 +196,7 @@ export class Weirgate {
     options: RequestOptions = {},
   ): Promise<ChatStream> {
     this.requireAppId();
-    const { response, metadata, funding, idempotencyKey } = await this.funded(
+    const { response, metadata, funding, idempotencyKey, planSource } = await this.funded(
       "/v1/chat/completions", featureId, { ...request, stream: true }, options,
     );
     if (!response.headers.get("content-type")?.toLowerCase().includes("text/event-stream")) {
@@ -213,7 +214,7 @@ export class Weirgate {
     return {
       ...metadata,
       creditsRemaining: numericHeader(response.headers.get("x-credits-remaining")),
-      chunks: this.parseSSE(body, metadata, idempotencyKey),
+      chunks: this.parseSSE(body, metadata, idempotencyKey, planSource),
       funding,
     };
   }
@@ -362,7 +363,14 @@ export class Weirgate {
     featureId: string,
     body: unknown,
     options: RequestOptions,
-  ): Promise<{ response: Response; metadata: ResponseMetadata; funding: FundingOutcome | null; idempotencyKey: string }> {
+  ): Promise<{
+    response: Response;
+    metadata: ResponseMetadata;
+    funding: FundingOutcome | null;
+    idempotencyKey: string;
+    /** The plan whose token this response's request carried, if any. */
+    planSource: PlanCredentialSource | null;
+  }> {
     let idempotencyKey = options.idempotencyKey ?? randomIdempotencyKey();
     let preference = options.funding ?? this.fundingPreference;
     const source = this.planCredential;
@@ -381,7 +389,7 @@ export class Weirgate {
         if (source && token && outcome?.fallback?.disable && outcome.fallback.refusedRail === "user_plan") {
           await source.requireReconnect({ kind: "rail_disabled", reason: outcome.fallback.reason });
         }
-        return { response, metadata, funding: outcome, idempotencyKey };
+        return { response, metadata, funding: outcome, idempotencyKey, planSource: token && source ? source : null };
       }
       const error = await WeirgateError.fromResponse(response);
       if (error instanceof FundingRailError) error.idempotencyKey = idempotencyKey;
@@ -504,6 +512,7 @@ export class Weirgate {
     body: ReadableStream<Uint8Array>,
     metadata: ResponseMetadata,
     idempotencyKey: string | null = null,
+    planSource: PlanCredentialSource | null = null,
   ): AsyncGenerator<ChatCompletionChunk> {
     const reader = body.getReader();
     const decoder = new TextDecoder();
@@ -547,7 +556,13 @@ export class Weirgate {
           if (frameError && typeof frameError === "object") {
             // A typed refusal after the stream started (x-weirgate-sse mid_stream_error).
             const error = errorFromStreamFrame(frameError, metadata);
-            if (error instanceof FundingRailError) error.idempotencyKey = idempotencyKey;
+            if (error instanceof FundingRailError) {
+              error.idempotencyKey = idempotencyKey;
+              // `next_and_disable` mid-stream: stop offering the plan until the user re-consents.
+              if (planSource && error.disable && error.rail === "user_plan") {
+                await planSource.requireReconnect({ kind: "rail_disabled", reason: error.reason });
+              }
+            }
             throw error;
           }
           if (!Array.isArray(chunk.choices)) {

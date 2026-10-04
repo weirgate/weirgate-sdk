@@ -2,6 +2,17 @@
 
 All notable public SDK changes are recorded here.
 
+## Unreleased
+
+- Both SDKs read `detail.disable` on a stream's final error frame, which weirgate sends
+  for a mid-stream refusal under `on_refusal: next_and_disable` (weirgate `0738d89`). When
+  the stream carried the user's plan token, the plan is disconnected
+  (`.reconnectRequired(.railDisabled)` / `requireReconnect({ kind: "rail_disabled" })`) before
+  the typed error is thrown, as a `disable` fallback header already did. New read-only
+  `FundingRailError.disablesRail` (Swift) and `FundingRailError.disable` (TypeScript).
+- Test fixtures are recorded against weirgate `0738d89`, with mid-stream recordings for
+  `next_and_disable` and `stop`.
+
 ## @weirgate/sdk 0.3.0 and WeirgateKit 0.4.0 — 2026-10-03
 
 Funding rails v2, Phase 2: let an app offer "use your ChatGPT plan" on top of the funding
