@@ -13,8 +13,8 @@ extension WeirgateClient: WeirgateStoreRedeeming {}
 
 /// What happened to one transaction the observer sent to Weirgate.
 public enum WeirgateRedemptionOutcome: Sendable {
-    /// Weirgate credited the purchase (`granted` or `alreadyGranted`). The transaction was
-    /// finished.
+    /// Weirgate credited the purchase, or recorded the subscription period (`granted` or
+    /// `alreadyGranted`; see ``PurchaseRedemption/kind``). The transaction was finished.
     case redeemed(PurchaseRedemption)
     /// The App Store refunded or revoked the purchase (`purchase_revoked`). The transaction
     /// was finished and nothing was credited.
@@ -47,8 +47,11 @@ public struct WeirgateStoreEvent: Sendable {
         /// `Transaction.unfinished`, at ``WeirgateStoreObserver/start()`` or
         /// ``WeirgateStoreObserver/redeemUnfinished()``.
         case unfinished
-        /// `Transaction.updates` (Ask to Buy approvals, other devices, refunds).
+        /// `Transaction.updates` (Ask to Buy approvals, other devices, refunds, subscription
+        /// renewals while the app runs).
         case updates
+        /// `Transaction.currentEntitlements`, at ``WeirgateStoreObserver/restoreSubscriptions()``.
+        case currentEntitlements
     }
 
     public let transactionID: UInt64
@@ -89,10 +92,13 @@ public struct WeirgateStoreRetryPolicy: Sendable, Equatable {
     }
 }
 
-/// Redeems StoreKit 2 consumable purchases with Weirgate and finishes them by Weirgate's rules.
+/// Redeems StoreKit 2 purchases with Weirgate (consumable credit packs and auto-renewable
+/// subscriptions) and finishes them by Weirgate's rules.
 ///
 /// - At ``start()`` it redeems every `Transaction.unfinished`, then keeps listening to
-///   `Transaction.updates`.
+///   `Transaction.updates`, where subscription renewals arrive while the app runs.
+/// - ``restoreSubscriptions()`` redeems the user's current subscription entitlements, for a
+///   new device or a Restore Purchases button.
 /// - It calls `finish()` only after Weirgate returns 200, or `purchase_revoked`.
 /// - Other `purchase_*` errors and `payments_not_configured` are permanent for that record:
 ///   no retry loop, the transaction stays unfinished, and the app hears about it on
@@ -119,19 +125,31 @@ public actor WeirgateStoreObserver {
 
     /// - Parameters:
     ///   - client: usually your `WeirgateClient`.
-    ///   - shouldRedeem: which transactions from `Transaction.unfinished` and
-    ///     `Transaction.updates` belong to Weirgate. Defaults to consumables; narrow it if
-    ///     the app also sells products handled elsewhere. Purchases made through
-    ///     ``purchase(_:appAccountToken:options:)`` and ``handle(_:)`` are always redeemed.
+    ///   - shouldRedeem: which transactions from `Transaction.unfinished`,
+    ///     `Transaction.updates`, and `Transaction.currentEntitlements` belong to Weirgate.
+    ///     Defaults to ``redeemsByDefault(_:)`` (consumables and auto-renewable
+    ///     subscriptions); narrow it if the app also sells products handled elsewhere.
+    ///     Purchases made through ``purchase(_:appAccountToken:options:)`` and ``handle(_:)``
+    ///     are always redeemed.
     public init(
         client: some WeirgateStoreRedeeming,
         retryPolicy: WeirgateStoreRetryPolicy = .default,
-        shouldRedeem: @escaping @Sendable (Transaction) -> Bool = { $0.productType == .consumable }
+        shouldRedeem: @escaping @Sendable (Transaction) -> Bool = WeirgateStoreObserver.redeemsByDefault
     ) {
         self.client = client
         self.retryPolicy = retryPolicy
         self.shouldRedeem = shouldRedeem
         (events, continuation) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(100))
+    }
+
+    /// The default `shouldRedeem`: consumables (credit packs) and auto-renewable
+    /// subscriptions (plans), the two product kinds Weirgate maps.
+    public static func redeemsByDefault(_ transaction: Transaction) -> Bool {
+        isRedeemedByDefault(transaction.productType)
+    }
+
+    static func isRedeemedByDefault(_ productType: Product.ProductType) -> Bool {
+        productType == .consumable || productType == .autoRenewable
     }
 
     deinit {
@@ -171,6 +189,30 @@ public actor WeirgateStoreObserver {
         return await withTaskGroup(of: WeirgateStoreEvent.self) { group in
             for verification in owned {
                 group.addTask { await self.redeem(verification, source: .unfinished) }
+            }
+            var events: [WeirgateStoreEvent] = []
+            for await event in group { events.append(event) }
+            return events
+        }
+    }
+
+    /// Redeems the user's current auto-renewable subscription entitlements
+    /// (`Transaction.currentEntitlements`) and returns what happened. Use it for a Restore
+    /// Purchases button and after sign-in on a new device. Each subscription belongs to the
+    /// first user of your app who redeems it; another account gets `alreadyGranted` with a
+    /// `nil` ``PurchaseRedemption/subscription``. Already-finished transactions are safe to
+    /// redeem again.
+    @discardableResult
+    public func restoreSubscriptions() async -> [WeirgateStoreEvent] {
+        var owned: [VerificationResult<Transaction>] = []
+        for await verification in Transaction.currentEntitlements {
+            let transaction = verification.unsafePayloadValue
+            guard transaction.productType == .autoRenewable, shouldRedeem(transaction) else { continue }
+            owned.append(verification)
+        }
+        return await withTaskGroup(of: WeirgateStoreEvent.self) { group in
+            for verification in owned {
+                group.addTask { await self.redeem(verification, source: .currentEntitlements) }
             }
             var events: [WeirgateStoreEvent] = []
             for await event in group { events.append(event) }

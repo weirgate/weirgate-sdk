@@ -4,6 +4,37 @@ All notable public SDK changes are recorded here.
 
 ## Unreleased
 
+App Store subscriptions (weirgate#90) and the balance split (weirgate#87), in one release
+(weirgate-sdk#25, folds in #24). Spec provenance moves to weirgate `91580ca`.
+
+### Swift (WeirgateKit, next minor)
+
+- `Balance.allowanceAvailable` and `Balance.purchasedAvailable` (sum to `unitsAvailable`;
+  `purchasedAvailable` can be negative). Decoded with a fallback (0 / `unitsAvailable`)
+  when a response lacks them.
+- `PurchaseRedemption` adds `kind` (`.consumable` default, `.subscription`),
+  `originalTransactionID`, `tier`, and `subscription` (`tier`, `status`, `expiresAt`,
+  `active`, `planApplied`; `nil` when another user owns the subscription).
+- **Behavior change:** `WeirgateStoreObserver`'s default `shouldRedeem` is now
+  `redeemsByDefault`, which redeems auto-renewable subscriptions as well as consumables
+  (renewals arrive on `Transaction.updates`). Apps that sell subscriptions handled
+  elsewhere should pass `shouldRedeem: { $0.productType == .consumable }`.
+- `WeirgateStoreObserver.restoreSubscriptions()` redeems `Transaction.currentEntitlements`
+  (auto-renewable) for new devices and Restore Purchases.
+- **Source-breaking:** `WeirgateStoreEvent.Source` gains `.currentEntitlements`; exhaustive
+  switches need the new case.
+
+### TypeScript (@weirgate/sdk, next minor)
+
+- `redeemAppleTransaction(signedTransaction)`: end-user redeem of a StoreKit 2 record
+  (`POST /v1/purchases/apple`), returning `AppleRedemption`.
+- Regenerated types: `Balance` and `UserBalance` / `UserListRow` with
+  `allowance_available` / `purchased_available`; `getUserCredits` returns `tier_source` and
+  `subscriptions`; `UserRow.tierSubscriptionId`; `PaymentTransaction.kind` / `tier` /
+  `expiresAt`; `ConfigProposalCreated.warnings`; App Store products typed as consumable or
+  subscription. New exported types `AppleRedemption`, `AppleSubscriptionState`,
+  `PaymentTransaction`, `PaymentSubscription`, `PlanSource`.
+
 - Generated types only: webhook proposals accept only `operation: "update" | "delete"` and
   require `endpoint_id`. weirgate `9f5a4c5` (#132) rejects `create`, because its apply
   minted a signing secret no response returned; create endpoints with

@@ -66,6 +66,31 @@ tier then takes effect immediately and ends on time. `balance.unlimited` and
 Keep admin keys server-side. End-user applications must not embed this management
 surface or its credential.
 
+## Balance split and App Store purchases
+
+`balance()` adds `allowance_available` and `purchased_available`, which always sum to
+`units_available`; the allowance is spent first. `allowance_available` is unspent allowance
+of a plan whose allowance resets each UTC month (`allowance_rollover: "expire"`), never
+negative and 0 on plans whose allowance carries over. `purchased_available` is everything
+that never expires (credit packs, welcome and manual grants, carried-over allowance,
+adjustments) and can be negative after a refund or clawback. Weirgate writes the
+month-end removal itself as an adjustment with `reason: "allowance_expiry"`; the
+adjustments API refuses that reason.
+
+```ts
+const { data } = await client.balance();
+label.textContent = `${data.allowance_available} monthly + ${data.purchased_available} purchased`;
+```
+
+Apps whose purchase flow hands you a StoreKit 2 `jwsRepresentation` (for example a
+React Native or Capacitor wrapper) redeem it as the end user with
+`redeemAppleTransaction(jws)`. Consumables return credits; products mapped as
+subscriptions return `kind: "subscription"`, the user's `tier`, and `subscription`
+(`status`, `expires_at`, `active`, `plan_applied`; `null` when another user of the app owns
+the subscription). Finish the transaction only after `granted` or `already_granted`, or a
+`purchase_revoked` error. See Weirgate's
+[App Store subscriptions guide](https://weirgate.com/guides/app-store-subscriptions/).
+
 ## Use the user's AI plan (web apps)
 
 A feature's funding chain decides who pays for each request: the user's AI plan
@@ -178,7 +203,7 @@ It may omit `expires_at`, and can call only these methods:
 | `createGrant(appId, externalId, { units, source }, { idempotencyKey })` | Credits added by a purchase |
 | `reverseGrant(appId, grantId, { idempotencyKey })` | Cancelling a whole grant, e.g. a full refund |
 | `adjustCredits(appId, externalId, { units, reason, source, allow_negative }, { idempotencyKey })` | Signed corrections: deductions, partial clawbacks, goodwill |
-| `getUserCredits(appId, externalId)` | Balance, unlimited state, grants, adjustments, and recent usage |
+| `getUserCredits(appId, externalId)` | Balance (with `allowance_available` / `purchased_available`), unlimited state, grants, adjustments, tier changes, plan source (`tier_source`: `subscription` or `manual`), App Store `subscriptions`, and recent usage |
 
 Writes create the user when the external ID is unknown. Every write requires
 `idempotencyKey`, and the SDK never generates one: derive it from your payment

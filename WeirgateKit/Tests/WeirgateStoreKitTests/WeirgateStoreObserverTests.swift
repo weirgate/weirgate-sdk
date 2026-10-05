@@ -264,3 +264,30 @@ func retryDelayCap() {
     #expect(policy.delay(afterAttempt: 8, retryAfter: nil) == .seconds(30))
     #expect(policy.delay(afterAttempt: 1, retryAfter: 120) == .seconds(30))
 }
+
+@Test("by default the observer redeems consumables and auto-renewable subscriptions only")
+func defaultRedeemedProductTypes() {
+    #expect(WeirgateStoreObserver.isRedeemedByDefault(.consumable))
+    #expect(WeirgateStoreObserver.isRedeemedByDefault(.autoRenewable))
+    #expect(!WeirgateStoreObserver.isRedeemedByDefault(.nonConsumable))
+    #expect(!WeirgateStoreObserver.isRedeemedByDefault(.nonRenewable))
+}
+
+@Test("a subscription redemption finishes the transaction like a consumable")
+func finishesSubscription() async throws {
+    let value = PurchaseRedemption(
+        status: .granted, units: 0, transactionID: "2000000000000002", productID: "com.weirgate.test.pro.monthly",
+        environment: .test, unitsAvailable: 500, kind: .subscription, originalTransactionID: "2000000000000001", tier: "pro",
+        subscription: .init(tier: "pro", status: .active, expiresAt: Date(timeIntervalSince1970: 1_793_782_800), active: true, planApplied: true)
+    )
+    let stub = StubRedeemer([.success(value)])
+    let counter = FinishCounter()
+    let event = await makeObserver(stub).process(transaction(id: 2, counter: counter), source: .currentEntitlements)
+    guard case .redeemed(let redeemed) = event.outcome else {
+        Issue.record("expected redeemed, got \(event.outcome)")
+        return
+    }
+    #expect(redeemed.kind == .subscription)
+    #expect(event.source == .currentEntitlements)
+    #expect(await counter.count == 1)
+}

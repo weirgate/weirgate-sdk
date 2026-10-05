@@ -87,7 +87,7 @@ export interface paths {
         };
         /**
          * Read balance after ensuring the current monthly allowance
-         * @description Lazily provisions the authenticated app/user row, ends a time-limited tier assignment whose expires_at has passed (returning the user to the app's default tier with an audited change), activates any scheduled tier for the current UTC period, and issues that period's idempotent monthly allowance grant before returning the balance. Apps whose welcome_grant requires no sign-in also receive that one-time grant here. unlimited is true while the active tier is unlimited; units_available still reports the real balance.
+         * @description Lazily provisions the authenticated app/user row, ends a time-limited tier assignment whose expires_at has passed (returning the user to the app's default tier with an audited change), activates any scheduled tier for the current UTC period, and issues that period's idempotent monthly allowance grant before returning the balance. Apps whose welcome_grant requires no sign-in also receive that one-time grant here. On the first request of a month, unspent allowance of an allowance_rollover expire tier from earlier months is removed with one allowance_expiry adjustment per month. unlimited is true while the active tier is unlimited; units_available still reports the real balance. allowance_available + purchased_available = units_available; pending reservations draw the allowance first.
          */
         get: operations["getBalance"];
         put?: never;
@@ -148,8 +148,9 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Redeem a StoreKit 2 consumable purchase for credits
+         * Redeem a StoreKit 2 purchase (consumable credits or a subscription plan)
          * @description Body is the StoreKit 2 VerificationResult.jwsRepresentation of one transaction. Weirgate checks Apple's signature (x5c chain to the pinned Apple Root CA - G3, ES256, Apple marker OIDs, certificate dates as of the record's signedDate; no OCSP), then bundle ID, environment (Apple sandbox is recorded as test, production as live; each must be listed in payments.apple.environments), that the product is mapped as a consumable and the record's type is Consumable, that the transaction is not revoked, and that its appAccountToken equals the caller's app_account_token (from GET /v1/balance). A record without appAccountToken is credited to the caller unless payments.apple.require_app_account_token is set. The grant (units = product units x quantity, source apple:<productId>, idempotency key apple:<transactionId>) is written once per transaction, whether it arrives here, from an App Store notification, or both. granted means this call credited the caller; already_granted means the transaction was credited earlier (units is what the caller received from it; 0 when another user redeemed it first). Call Transaction.finish() only after granted or already_granted. A transaction the App Store refunded returns purchase_revoked; finishing it is safe. Other purchase_* errors are permanent for that record.
+         *     A product mapped as kind subscription takes an Auto-Renewable Subscription record (other types are purchase_unknown_product). Each period is recorded once (0 units), and the subscription is keyed to its first owner by originalTransactionId, so renewals follow that user. The mapped plan applies now and ends at the period's expiresDate (or the billing grace period end); this month's allowance is brought up to the plan's full monthly allowance. A manual assignment stays unless the subscription's plan ranks higher (unlimited, then larger allowance), and the user falls back to the subscription when it ends. A Family Sharing record (inAppOwnershipType FAMILY_SHARED) can't carry an appAccountToken, so require_app_account_token doesn't apply to it. The response adds kind, original_transaction_id, the caller's tier, and subscription (null when another user owns the subscription). granted means this call recorded the period for the caller; already_granted covers replays and older periods. Both are safe to finish.
          */
         post: operations["redeemAppleTransaction"];
         delete?: never;
@@ -169,7 +170,7 @@ export interface paths {
         put?: never;
         /**
          * App Store Server Notifications v2 endpoint for one app
-         * @description Paste https://api.weirgate.com/v1/apple/notifications/<appId> into App Store Connect as both the production and sandbox Server Notifications URL (Version 2). Authentication is Apple's signature on signedPayload and on the inner signedTransactionInfo, plus the app's bundle ID, App Apple ID (production), and an enabled environment. Any failure, including an unknown app, returns purchase_invalid_signature with no detail. Duplicate notificationUUIDs are acknowledged without effect. ONE_TIME_CHARGE grants the consumable to the user whose app_account_token it carries (same once-per-transaction rule as the redeem route); REFUND reverses the grant, and the balance may go below zero (a refund seen before any redeem is recorded so the purchase can't be redeemed later); REFUND_REVERSED grants it again (key apple-rr:<transactionId>); CONSUMPTION_REQUEST sends a consumption report only when payments.apple.send_consumption_info is on and App Store Server API credentials are stored; TEST is recorded for the doctor; other types are acknowledged and recorded.
+         * @description Paste https://api.weirgate.com/v1/apple/notifications/<appId> into App Store Connect as both the production and sandbox Server Notifications URL (Version 2). Authentication is Apple's signature on signedPayload and on the inner signedTransactionInfo, plus the app's bundle ID, App Apple ID (production), and an enabled environment. Any failure, including an unknown app, returns purchase_invalid_signature with no detail. Duplicate notificationUUIDs are acknowledged without effect. ONE_TIME_CHARGE grants the consumable to the user whose app_account_token it carries (same once-per-transaction rule as the redeem route); REFUND reverses the grant, and the balance may go below zero (a refund seen before any redeem is recorded so the purchase can't be redeemed later); REFUND_REVERSED grants it again (key apple-rr:<transactionId>); CONSUMPTION_REQUEST sends a consumption report only when payments.apple.send_consumption_info is on and App Store Server API credentials are stored; TEST is recorded for the doctor; other types are acknowledged and recorded. For products mapped as kind subscription: SUBSCRIBED, DID_RENEW, OFFER_REDEEMED, RENEWAL_EXTENDED, and DID_CHANGE_RENEWAL_PREF/UPGRADE start or extend the plan (a downgrade or crossgrade to another duration takes effect at the renewal that starts the new period); DID_FAIL_TO_RENEW/GRACE_PERIOD keeps it until gracePeriodExpiresDate (signedRenewalInfo); EXPIRED, GRACE_PERIOD_EXPIRED, and REVOKE end it; REFUND of the current period ends it and expires this month's unspent allowance (never below what was spent); REFUND_REVERSED reinstates it while the period is current. Records are ordered by signedDate, so an older or duplicate record changes nothing, and each transaction is recorded once. The owner is the subscription's first owner (by originalTransactionId), else the user whose appAccountToken the transaction carries; an unattributed subscription is recorded until the app redeems it. Outcomes start with subscription_ (active, expired, revoked, refunded, unchanged, unattributed).
          */
         post: operations["receiveAppleNotification"];
         delete?: never;
@@ -927,7 +928,7 @@ export interface paths {
         get?: never;
         /**
          * Schedule a configured tier for an app user
-         * @description Creates the user when externalId is unknown, matching the grant endpoint. The assigned tier becomes active on that user's first lazy allowance grant in the next UTC calendar month. Exception: assigning an unlimited tier, or any change while the active tier is unlimited, takes effect immediately. expires_at (optional, RFC 3339, in the future and after the assignment takes effect) ends the assignment; when omitted it defaults to the start plus the tier's default_duration_days, if set, and otherwise the assignment is open-ended. An ended assignment returns the user to the app's default tier on the next balance read or metered request (and at the end time for idle users), recorded as an expire change with a tier.expired webhook; tier.expiring is sent expiry_notice_days (default 3) before. top_up_now additionally grants only the positive, not-yet-credited difference between the active and target monthly allowances for the current UTC month; downgrades never claw back units. Replays with the same X-Idempotency-Key do not repeat the mutation, audit event, or top-up. Requires apply scope and the plans tool group. Clerk dashboard sessions require recent second-factor verification.
+         * @description Creates the user when externalId is unknown, matching the grant endpoint. The assigned tier becomes active on that user's first lazy allowance grant in the next UTC calendar month. Exception: assigning an unlimited tier, or any change while the active tier is unlimited, takes effect immediately. expires_at (optional, RFC 3339, in the future and after the assignment takes effect) ends the assignment; when omitted it defaults to the start plus the tier's default_duration_days, if set, and otherwise the assignment is open-ended. An ended assignment returns the user to the app's default tier on the next balance read or metered request (and at the end time for idle users), recorded as an expire change with a tier.expired webhook; tier.expiring is sent expiry_notice_days (default 3) before. top_up_now additionally grants only the positive, not-yet-credited difference between the active and target monthly allowances for the current UTC month (it expires with that month when the target tier's allowance_rollover is expire); downgrades never claw back units. Replays with the same X-Idempotency-Key do not repeat the mutation, audit event, or top-up. Requires apply scope and the plans tool group. Clerk dashboard sessions require recent second-factor verification.
          */
         put: operations["assignUserTier"];
         post?: never;
@@ -1866,6 +1867,10 @@ export interface components {
         Balance: {
             units_available: number;
             units_pending: number;
+            /** @description Unspent monthly allowance of an allowance_rollover expire tier, which ends with its UTC month. Always 0 on carry tiers. Spent before purchased_available. */
+            allowance_available: number;
+            /** @description Credits that never expire: purchases, welcome and manual grants, carry-tier allowance, and signed adjustments. Negative after a refund or clawback that exceeded them. */
+            purchased_available: number;
             tier: string;
             /**
              * Format: uuid
@@ -1916,6 +1921,29 @@ export interface components {
             environment: "test" | "live";
             units_available: number;
             units_pending: number;
+            /**
+             * @description Present for subscription products (consumable responses omit it).
+             * @enum {string}
+             */
+            kind?: "subscription";
+            /** @description Subscriptions only. */
+            original_transaction_id?: string;
+            /** @description Subscriptions only */
+            tier?: string;
+            /** @description Subscriptions only; null when another user owns the subscription. */
+            subscription?: null | {
+                tier: string | null;
+                /** @enum {string} */
+                status: "active" | "expired" | "revoked" | "refunded";
+                /**
+                 * Format: date-time
+                 * @description When the plan ends (period end
+                 */
+                expires_at: string;
+                active: boolean;
+                /** @description False when a higher-ranked manual plan is in effect; the subscription applies when that ends. */
+                plan_applied: boolean;
+            };
         };
         AppleNotificationInput: {
             /** @description App Store Server Notifications v2 signed payload (JWS). */
@@ -1947,10 +1975,50 @@ export interface components {
             /** @description The grant currently tied to the purchase. */
             grantId: string | null;
             refundCount: number;
+            /**
+             * @description subscription rows are one period of an auto-renewable subscription; they grant a plan
+             * @enum {string}
+             */
+            kind: "consumable" | "subscription";
+            /** @description Subscription periods only */
+            tier: string | null;
+            /** @description Subscription periods only */
+            expiresAt: number | null;
             /** @description Unix epoch milliseconds */
             createdAt: number;
             /** @description Unix epoch milliseconds */
             updatedAt: number;
+        };
+        /** @description One auto-renewable subscription, keyed by original transaction ID. active is true while status is active, the tier is configured, and max(expires_at, grace_expires_at) is in the future. */
+        PaymentSubscription: {
+            id: string;
+            /** @enum {string} */
+            provider: "apple";
+            original_transaction_id: string;
+            /** @description The current period's product. */
+            product_id: string;
+            /** @description The plan that product maps to; null if no longer configured as a subscription. */
+            tier: string | null;
+            /** @enum {string} */
+            environment: "test" | "live";
+            /** @enum {string} */
+            status: "active" | "expired" | "revoked" | "refunded";
+            latest_transaction_id: string;
+            /** Format: date-time */
+            expires_at: string;
+            /**
+             * Format: date-time
+             * @description Billing grace period end while a renewal is failing.
+             */
+            grace_expires_at: string | null;
+            /** @description The product the next renewal will be (shows a pending downgrade). */
+            auto_renew_product_id: string | null;
+            auto_renew_status: boolean | null;
+            /** @description Apple inAppOwnershipType (PURCHASED or FAMILY_SHARED). */
+            ownership_type: string | null;
+            active: boolean;
+            /** Format: date-time */
+            updated_at: string;
         };
         AppleServerApiCredentialsInput: {
             /** @description App Store Connect issuer ID (Users and Access → Integrations → In-App Purchase). */
@@ -2056,6 +2124,11 @@ export interface components {
                 [key: string]: {
                     /** @default 0 */
                     monthly_allowance_units: number;
+                    /**
+                     * @description What happens to unspent allowance at the end of its UTC month. carry (the behavior when absent) keeps it; expire removes it with one allowance_expiry adjustment on the user's first request of a later month. Allowance is spent before every non-expiring credit, so expiry never takes purchased credits. Fixed per allowance grant when it is issued.
+                     * @enum {string}
+                     */
+                    allowance_rollover?: "carry" | "expire";
                     /** @description Skip the balance check and settle zero units; usage, provider cost, and configured velocity rules still apply. */
                     unlimited?: boolean;
                     /** @description Default assignment length when expires_at is omitted. */
@@ -2107,7 +2180,7 @@ export interface components {
                      *     ]
                      */
                     environments: ("sandbox" | "production")[];
-                    /** @description App Store product ID → what one unit grants. */
+                    /** @description App Store product ID → what a purchase grants. Consumables grant credits; subscriptions put the user on a plan while active. */
                     products: {
                         [key: string]: {
                             /**
@@ -2117,6 +2190,11 @@ export interface components {
                             kind: "consumable";
                             /** @description Credits per unit purchased; a transaction's quantity multiplies it. */
                             units: number;
+                        } | {
+                            /** @enum {string} */
+                            kind: "subscription";
+                            /** @description The app tier an active Auto-Renewable Subscription assigns. Must exist. Set the tier's allowance_rollover to expire so its allowance resets monthly (a proposal warns otherwise); yearly plans refill monthly. */
+                            tier: string;
                         };
                     };
                     /**
@@ -2269,7 +2347,7 @@ export interface components {
         CreditAdjustmentInput: {
             /** @description Signed; negative deducts. */
             units: number;
-            /** @description manual, clawback, or developer free text. allowance_expiry is reserved for Weirgate. */
+            /** @description manual, clawback, or developer free text. allowance_expiry is reserved for Weirgate, which writes it when expire-tier allowance ends. */
             reason: string;
             /** @description Payment reference, e.g. stripe:ch_123. */
             source?: string;
@@ -2305,6 +2383,8 @@ export interface components {
             status: "pending";
             /** Format: date-time */
             expires_at: string;
+            /** @description Present only when non-empty. Recommendations that don't block the proposal, e.g. a subscription product whose tier lets allowance carry over. */
+            warnings?: string[];
         };
         WebhookProposalDocument: {
             /** @constant */
@@ -2541,10 +2621,14 @@ export interface components {
             available: number;
             pending: number;
         };
-        /** @description StoreBalance plus the user's unlimited state, matching GET /v1/balance. */
+        /** @description StoreBalance, its split into expiring allowance and non-expiring credits (allowance_available + purchased_available = available), and the user's unlimited state, matching GET /v1/balance. Admin reads never open a new month, so a closed month's unspent allowance stays in allowance_available until the user's next balance read or metered request expires it. */
         UserBalance: {
             available: number;
             pending: number;
+            /** @description Unspent monthly allowance of an allowance_rollover expire tier, which ends with its UTC month. Always 0 on carry tiers. Spent before purchased_available. */
+            allowance_available: number;
+            /** @description Credits that never expire: purchases, welcome and manual grants, carry-tier allowance, and signed adjustments. Negative after a refund or clawback that exceeded them. */
+            purchased_available: number;
             /** @description True while the active tier is unlimited; metered requests then skip the balance check and debit zero units. */
             unlimited: boolean;
             /**
@@ -2685,8 +2769,10 @@ export interface components {
              * @description The user's StoreKit appAccountToken (same value as GET /v1/balance app_account_token).
              */
             appAccountToken: string;
+            /** @description The store subscription that set the active tier; null for manual assignments and the default tier. */
+            tierSubscriptionId: string | null;
         };
-        /** @description UserRow plus the user's unlimited state, matching GET /v1/balance. */
+        /** @description UserRow plus the user's unlimited state and balance split, matching the single-user read's UserBalance (allowance_available + purchased_available = available). */
         UserListRow: {
             id: string;
             appId: components["schemas"]["AppId"];
@@ -2703,6 +2789,8 @@ export interface components {
             pendingTierExpiresAt: number | null;
             /** Format: uuid */
             appAccountToken: string;
+            /** @description The store subscription that set the active tier; null for manual assignments and the default tier. */
+            tierSubscriptionId: string | null;
             /** @description True while the active tier is unlimited and its assignment has not ended. */
             unlimited: boolean;
             /**
@@ -2710,6 +2798,10 @@ export interface components {
              * @description End of the unlimited assignment; null when not unlimited or open-ended.
              */
             unlimited_until: string | null;
+            /** @description Unspent monthly allowance of an allowance_rollover expire tier, which ends with its UTC month. Always 0 on carry tiers. Spent before purchased_available. */
+            allowance_available: number;
+            /** @description Credits that never expire: purchases, welcome and manual grants, carry-tier allowance, and signed adjustments. Negative after a refund or clawback that exceeded them. */
+            purchased_available: number;
         };
         /** @description Platform reads return tenants plus a revision map; tenant reads return one visible tenant plus revision. */
         ConfigRead: {
@@ -2730,7 +2822,7 @@ export interface components {
         };
         DoctorResult: {
             /** @enum {string} */
-            check: "auth" | "provider" | "webhook";
+            check: "auth" | "provider" | "webhook" | "payments";
             /** @enum {string} */
             status: "passed" | "blocked" | "skipped";
             code: string;
@@ -3289,6 +3381,12 @@ export interface components {
                     grants: components["schemas"]["GrantRow"][];
                     adjustments: components["schemas"]["CreditAdjustmentRow"][];
                     tier_changes: components["schemas"]["UserTierChangeRow"][];
+                    /**
+                     * @description Whether the active tier comes from a store subscription or a manual or default assignment.
+                     * @enum {string}
+                     */
+                    tier_source: "manual" | "subscription";
+                    subscriptions: components["schemas"]["PaymentSubscription"][];
                     recent_events: components["schemas"]["GenericObject"][];
                     recent_events_pagination: components["schemas"]["Pagination"];
                 };
@@ -3309,6 +3407,7 @@ export interface components {
                     adjustments: components["schemas"]["CreditAdjustmentRow"][];
                     /** @description Store purchases tied to the user, including Apple's signed claims as held. */
                     purchases?: components["schemas"]["GenericObject"][];
+                    subscriptions?: components["schemas"]["PaymentSubscription"][];
                     usage: components["schemas"]["GenericObject"][];
                     client_telemetry: components["schemas"]["GenericObject"][];
                     /** Format: date-time */
@@ -5382,7 +5481,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Stable key that makes the adjustment replay-safe. */
+                /** @description Stable key that makes the adjustment replay-safe. Keys starting with 'expire:' are reserved for Weirgate's allowance expiry and return invalid_request. */
                 "X-Idempotency-Key": string;
             };
             path: {
