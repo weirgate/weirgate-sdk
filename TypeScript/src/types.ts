@@ -14,7 +14,13 @@ export type EmbeddingRequest = components["schemas"]["EmbeddingRequest"];
 export type EmbeddingResponse = components["schemas"]["EmbeddingResponse"];
 export type FeatureCatalog = components["schemas"]["FeatureCatalog"];
 export type FeatureCatalogEntry = components["schemas"]["FeatureCatalogEntry"];
+/** `allowance_available` + `purchased_available` = `units_available`; `purchased_available` may be negative. */
 export type Balance = components["schemas"]["Balance"];
+/** Redeem result. Subscription products add `kind: "subscription"`, `original_transaction_id`, `tier`, and `subscription`. */
+export type AppleRedemption = components["schemas"]["AppleRedeemResult"];
+export type AppleSubscriptionState = NonNullable<AppleRedemption["subscription"]>;
+export type PaymentTransaction = components["schemas"]["PaymentTransaction"];
+export type PaymentSubscription = components["schemas"]["PaymentSubscription"];
 export type AccountDeletionResult = components["schemas"]["AccountDeletionResult"];
 export type ClientTelemetryInput = components["schemas"]["ClientTelemetryInput"];
 export type Accepted = components["schemas"]["Accepted"];
@@ -37,6 +43,8 @@ export type CreditAdjustmentInput = components["schemas"]["CreditAdjustmentInput
 export type CreditAdjustment = components["schemas"]["CreditAdjustmentRow"];
 export type CreditAdjustmentResult = components["responses"]["CreditAdjustmentOk"]["content"]["application/json"];
 export type UserCredits = components["responses"]["UserOk"]["content"]["application/json"];
+/** Whether a user's active tier comes from a store subscription or a manual/default assignment. */
+export type PlanSource = UserCredits["tier_source"];
 export type ManagementKeyMetadata = components["schemas"]["ManagementKeyMetadata"];
 export type ManagementKeyRotateInput = Partial<components["schemas"]["ManagementKeyRotateInput"]>;
 export type RotatedManagementKey = components["schemas"]["RotatedManagementKey"];

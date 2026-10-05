@@ -261,7 +261,7 @@ func providerKeyRedaction() throws {
 func provenance() {
     #expect(WeirgateKitInfo.version == "0.4.1")
     #expect(WeirgateKitInfo.apiVersion == "2026-07-18")
-    #expect(WeirgateKitInfo.specSourceCommit == "0738d89c371ca47412ec463a843766edfd7c75dc")
+    #expect(WeirgateKitInfo.specSourceCommit == "91580ca0c2c6ca49df1a43628f474c892c8d6c97")
 }
 
 // MARK: - Balance
@@ -507,4 +507,59 @@ func retryAfterParsing() {
     #expect(WeirgateClient.retryAfterSeconds(" 0 ") == 0)
     #expect(WeirgateClient.retryAfterSeconds("soon") == nil)
     #expect(WeirgateClient.retryAfterSeconds("Wed, 21 Oct 2015 07:28:00 GMT") == 0)
+}
+
+// MARK: - Balance split and subscriptions
+
+@Test("balance decodes the allowance / purchased split, and derives it when absent")
+func balanceSplit() throws {
+    let split = try JSONDecoder().decode(Balance.self, from: Data(#"""
+    {"units_available":-30,"units_pending":0,"tier":"pro","unlimited":false,"unlimited_until":null,
+     "app_account_token":"6F1C1F9E-4A5B-4D7E-9B3A-2F0F6A1B2C3D","allowance_available":0,"purchased_available":-30}
+    """#.utf8))
+    #expect(split.allowanceAvailable == 0)
+    #expect(split.purchasedAvailable == -30)
+    let monthly = try JSONDecoder().decode(Balance.self, from: Data(#"""
+    {"units_available":370,"units_pending":0,"tier":"pro","unlimited":false,"unlimited_until":null,
+     "app_account_token":"6F1C1F9E-4A5B-4D7E-9B3A-2F0F6A1B2C3D","allowance_available":120,"purchased_available":250}
+    """#.utf8))
+    #expect(monthly.allowanceAvailable + monthly.purchasedAvailable == monthly.unitsAvailable)
+    #expect(try JSONDecoder().decode(Balance.self, from: JSONEncoder().encode(monthly)) == monthly)
+    let older = try JSONDecoder().decode(Balance.self, from: Data(#"""
+    {"units_available":40,"units_pending":0,"tier":"free","unlimited":false,"unlimited_until":null,
+     "app_account_token":"6F1C1F9E-4A5B-4D7E-9B3A-2F0F6A1B2C3D"}
+    """#.utf8))
+    #expect(older.allowanceAvailable == 0)
+    #expect(older.purchasedAvailable == 40)
+}
+
+@Test("a subscription redemption decodes its plan state; consumables default to kind consumable")
+func subscriptionRedemption() throws {
+    let subscription = try JSONDecoder().decode(PurchaseRedemption.self, from: Data(#"""
+    {"status":"granted","kind":"subscription","units":0,"transaction_id":"2000000912345678",
+     "original_transaction_id":"2000000912340000","product_id":"com.example.app.pro.monthly","environment":"live",
+     "tier":"pro","units_available":500,"units_pending":0,
+     "subscription":{"tier":"pro","status":"active","expires_at":"2026-11-04T09:00:00.000Z","active":true,"plan_applied":true}}
+    """#.utf8))
+    #expect(subscription.kind == .subscription)
+    #expect(subscription.originalTransactionID == "2000000912340000")
+    #expect(subscription.tier == "pro")
+    #expect(subscription.subscription?.status == .active)
+    #expect(subscription.subscription?.planApplied == true)
+    #expect(subscription.subscription?.expiresAt == Date(timeIntervalSince1970: 1_793_782_800))
+    #expect(try JSONDecoder().decode(PurchaseRedemption.self, from: JSONEncoder().encode(subscription)) == subscription)
+
+    let ownedElsewhere = try JSONDecoder().decode(PurchaseRedemption.self, from: Data(#"""
+    {"status":"already_granted","kind":"subscription","units":0,"transaction_id":"2","original_transaction_id":"1",
+     "product_id":"p","environment":"test","tier":"free","units_available":0,"units_pending":0,"subscription":null}
+    """#.utf8))
+    #expect(ownedElsewhere.subscription == nil)
+
+    let consumable = try JSONDecoder().decode(PurchaseRedemption.self, from: Data(#"""
+    {"status":"granted","units":100,"grant_id":"g","transaction_id":"3","product_id":"credits","environment":"test",
+     "units_available":100,"units_pending":0}
+    """#.utf8))
+    #expect(consumable.kind == .consumable)
+    #expect(consumable.subscription == nil)
+    #expect(consumable.originalTransactionID == nil)
 }

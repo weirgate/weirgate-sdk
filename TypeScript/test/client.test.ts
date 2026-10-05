@@ -371,3 +371,61 @@ describe("credits API", () => {
     expect(ERROR_TYPES).toContain("insufficient_balance");
   });
 });
+
+describe("App Store subscriptions and the balance split", () => {
+  it("redeems a transaction as the end user and returns subscription state", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
+      status: "granted", kind: "subscription", units: 0, transaction_id: "2000000912345678",
+      original_transaction_id: "2000000912340000", product_id: "com.example.app.pro.monthly", environment: "live",
+      tier: "pro", units_available: 500, units_pending: 0,
+      subscription: { tier: "pro", status: "active", expires_at: "2026-11-04T09:00:00.000Z", active: true, plan_applied: true },
+    }));
+    const client = new Weirgate({ appId: "example-app", token: "user-jwt", fetch: fetcher });
+
+    const result = await client.redeemAppleTransaction("eyJ.signed.jws");
+
+    expect(fetcher.mock.calls[0]?.[0]).toBe("https://api.weirgate.com/v1/purchases/apple");
+    expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ method: "POST" });
+    expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))).toEqual({ signed_transaction: "eyJ.signed.jws" });
+    const headers = new Headers(fetcher.mock.calls[0]?.[1]?.headers);
+    expect(headers.get("authorization")).toBe("Bearer user-jwt");
+    expect(headers.get("x-app-id")).toBe("example-app");
+    expect(result.data).toMatchObject({ kind: "subscription", tier: "pro", subscription: { active: true, plan_applied: true } });
+    expect(() => client.redeemAppleTransaction("")).toThrow(/signedTransaction/);
+  });
+
+  it("types a purchase rejection", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
+      error: { type: "purchase_revoked", message: "the App Store refunded this transaction", detail: { reason: "transaction_refunded" } },
+    }, { status: 409, headers: { "X-Weirgate-Error-Type": "purchase_revoked" } }));
+    const client = new Weirgate({ appId: "example-app", token: "user-jwt", fetch: fetcher });
+    const error = await client.redeemAppleTransaction("eyJ.signed.jws").catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(WeirgateError);
+    expect(error).toMatchObject({ type: "purchase_revoked", status: 409 });
+  });
+
+  it("exposes the allowance / purchased split and the plan source", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({
+        units_available: 620, units_pending: 0, tier: "pro", unlimited: false, unlimited_until: null,
+        app_account_token: "6f1c1f9e-4a5b-4d7e-9b3a-2f0f6a1b2c3d", allowance_available: 500, purchased_available: 120,
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        user: {}, balance: { available: 620, pending: 0, unlimited: false, unlimited_until: null, allowance_available: 500, purchased_available: 120 },
+        grants: [], adjustments: [], tier_changes: [], tier_source: "subscription",
+        subscriptions: [{ id: "sub_1", provider: "apple", original_transaction_id: "2000000912340000", product_id: "com.example.app.pro.monthly",
+          tier: "pro", environment: "live", status: "active", latest_transaction_id: "2000000912345678",
+          expires_at: "2026-11-04T09:00:00.000Z", grace_expires_at: null, auto_renew_product_id: null, auto_renew_status: true,
+          ownership_type: "PURCHASED", active: true, updated_at: "2026-10-04T09:00:00.000Z" }],
+        recent_events: [], recent_events_pagination: { limit: 50, returned: 0, truncated: false },
+      }));
+    const client = new Weirgate({ appId: "example-app", token: "user-jwt", adminKey: "wgk_credits", fetch: fetcher });
+
+    const balance = (await client.balance()).data;
+    expect(balance.allowance_available + balance.purchased_available).toBe(balance.units_available);
+    const credits = (await client.getUserCredits("example-app", "u1")).data;
+    expect(credits.tier_source).toBe("subscription");
+    expect(credits.balance).toMatchObject({ allowance_available: 500, purchased_available: 120 });
+    expect(credits.subscriptions[0]).toMatchObject({ tier: "pro", active: true });
+  });
+});

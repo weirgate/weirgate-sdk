@@ -20,7 +20,7 @@ npm install @weirgate/sdk
 
 For Swift Package Manager, add
 `https://github.com/weirgate/weirgate-sdk.git` and select the `WeirgateKit` product (and
-`WeirgateStoreKit` to sell App Store credit packs). The root package manifest makes tagged
+`WeirgateStoreKit` to sell App Store credit packs or subscriptions). The root package manifest makes tagged
 releases directly resolvable from that URL.
 
 The clients require application-issued end-user JWTs. Provider credentials remain
@@ -38,15 +38,17 @@ Apps must delete in this order: call Weirgate first while the token is valid, re
 successful response, then delete the identity-provider user. If the second step fails,
 reauthenticate as needed and retry the sequence; Weirgate replay is idempotent.
 
-## Welcome credits and App Store purchases (Swift)
+## Welcome credits, App Store purchases, and subscriptions
 
 `WeirgateKit` claims one-time welcome credits after Sign in with Apple
-(`claimWelcomeCredits(appleIdentityToken:)`), reports unlimited plans and the user's
-`appAccountToken` on `balance()`, and redeems StoreKit 2 consumable purchases
+(`claimWelcomeCredits(appleIdentityToken:)`), reports unlimited plans, the monthly
+allowance / purchased split, and the user's `appAccountToken` on `balance()`, and redeems
+StoreKit 2 consumable purchases and auto-renewable subscriptions
 (`redeemAppStoreTransaction(jws:)`). The separate `WeirgateStoreKit` product adds
 `WeirgateStoreObserver`, which buys with the user's `appAccountToken`, redeems unfinished and
-updated transactions, and finishes each one only when Weirgate credits it or reports it
-refunded. See the [WeirgateKit README](./WeirgateKit/README.md#app-store-credit-packs-weirgatestorekit).
+updated transactions (including subscription renewals), restores current subscriptions,
+and finishes each one only when Weirgate handles it or reports it refunded. TypeScript has
+the same redeem call (`redeemAppleTransaction`) and the balance split. See the [WeirgateKit README](./WeirgateKit/README.md#app-store-credit-packs-weirgatestorekit).
 
 ## Use the user's AI plan (funding rails)
 

@@ -3,7 +3,7 @@
 Swift Package Manager client for the public Weirgate API frozen at version `2026-07-18`.
 
 Add `https://github.com/weirgate/weirgate-sdk.git` as a package dependency and select the
-`WeirgateKit` product. Apps that sell App Store credit packs also select `WeirgateStoreKit`.
+`WeirgateKit` product. Apps that sell App Store credit packs or subscriptions also select `WeirgateStoreKit`.
 
 ```swift
 import WeirgateKit
@@ -44,8 +44,22 @@ Weirgate-first sequence after a partial failure is safe.
   end date. `unitsAvailable` still reports the real balance.
 - `appAccountToken`: a stable UUID for this user row, used for App Store purchases below.
 
-There is no split between monthly-allowance and purchased credits yet: every credit is in
-one pool until the server adds a breakdown (weirgate#87).
+- `allowanceAvailable` / `purchasedAvailable`: the balance split into the plan's monthly
+  allowance and everything that never expires. They always sum to `unitsAvailable`, and the
+  allowance is spent first.
+
+```swift
+let balance = try await client.balance().value
+label.text = "\(Int(balance.allowanceAvailable)) monthly + \(Int(balance.purchasedAvailable)) purchased"
+// "120 monthly + 250 purchased"
+```
+
+`allowanceAvailable` is unspent allowance of a plan whose allowance resets each UTC month
+(`allowance_rollover: expire`); it is never negative, and 0 on plans whose allowance carries
+over. `purchasedAvailable` is everything that never expires (credit packs, welcome and
+manual grants, carried-over allowance, adjustments) and **can be negative** after a refund
+or clawback. When a month ends, Weirgate removes its unspent allowance with an adjustment
+whose reason is `allowance_expiry`; Weirgate writes that reason itself, your server can't.
 
 ## Welcome credits (Sign in with Apple)
 
@@ -84,7 +98,7 @@ When Weirgate can't reach Apple's keys, the call waits for `Retry-After` (capped
 seconds) and retries once by default (`maxAttempts: 2`). Nothing is granted in that case, so
 retrying is always safe. Claims don't use DeviceCheck, so they work on the simulator.
 
-## App Store credit packs (`WeirgateStoreKit`)
+## App Store credit packs and subscriptions (`WeirgateStoreKit`)
 
 Add the `WeirgateStoreKit` product as well. It is a separate target, so apps that sell
 nothing never link StoreKit through `WeirgateKit`.
@@ -143,8 +157,44 @@ rules.
 
 Two redemptions of the same transaction never run at the same time: if the launch sweep and
 `Transaction.updates` deliver one transaction together, the second waits for the first and
-gets its outcome. By default the observer handles consumables only; pass `shouldRedeem` if
-the app also sells products handled elsewhere.
+gets its outcome. By default the observer handles consumables and auto-renewable
+subscriptions (`WeirgateStoreObserver.redeemsByDefault`); pass `shouldRedeem` if the app
+also sells products handled elsewhere.
+
+### Subscriptions
+
+Map each auto-renewable subscription product to a tier in your Weirgate config
+(`{ "kind": "subscription", "tier": "pro" }`; see Weirgate's
+[App Store subscriptions guide](https://weirgate.com/guides/app-store-subscriptions/)).
+Buy and redeem exactly as above: the observer redeems the purchase, and renewals arriving on
+`Transaction.updates` while the app runs. Weirgate also hears renewals, upgrades, expiry, and
+refunds from Apple's server notifications, so the plan stays right when the app is closed.
+
+A subscription redemption has `kind == .subscription`, `units == 0`, `tier` (the user's
+plan after the redeem), and `subscription`:
+
+```swift
+case .completed(.redeemed(let redemption)) where redemption.kind == .subscription:
+    if let sub = redemption.subscription, sub.active {
+        showPlan(redemption.tier, renewsOrEnds: sub.expiresAt)   // sub.planApplied is false while
+    }                                                            // a higher manual plan is in effect
+```
+
+Restore on a new device, or from a Restore Purchases button:
+
+```swift
+for event in await observer.restoreSubscriptions() {
+    if case .redeemed(let redemption) = event.outcome, redemption.subscription == nil {
+        showOwnedByAnotherAccount()   // this subscription belongs to another user of the app
+    }
+}
+```
+
+`restoreSubscriptions()` redeems `Transaction.currentEntitlements` (auto-renewable only).
+Each subscription belongs to the first user of your app who redeems it (keyed by Apple's
+original transaction ID); another account gets `alreadyGranted` with a `nil`
+`subscription`. Family Sharing transactions carry no `appAccountToken`; Weirgate gives the
+plan to the family member who redeems one, even when the app requires the token.
 
 **`appAccountToken` caveat.** The token belongs to the Weirgate user row, not the Apple ID.
 A new user row has a new token: an anonymous user who reinstalls, or a user who deleted

@@ -1,6 +1,7 @@
 import {
   API_VERSION,
   type AccountDeletionResult,
+  type AppleRedemption,
   type Accepted,
   type Balance,
   type CatalogResult,
@@ -141,6 +142,21 @@ export class Weirgate {
   balance(signal?: AbortSignal): Promise<WeirgateResult<Balance>> {
     this.requireAppId();
     return this.requestJson("GET", "/v1/balance", undefined, { signal });
+  }
+
+  /**
+   * Redeem one App Store transaction (StoreKit 2 `jwsRepresentation`) for the signed-in
+   * user: credits for a consumable, the mapped plan for an auto-renewable subscription.
+   * Finish the transaction only after `granted` or `already_granted` (or a
+   * `purchase_revoked` error). Subscription results carry `kind: "subscription"` and
+   * `subscription` (null when another user owns it).
+   */
+  redeemAppleTransaction(signedTransaction: string, signal?: AbortSignal): Promise<WeirgateResult<AppleRedemption>> {
+    this.requireAppId();
+    if (typeof signedTransaction !== "string" || signedTransaction.length === 0) {
+      throw new TypeError("signedTransaction (StoreKit 2 jwsRepresentation) is required");
+    }
+    return this.requestJson("POST", "/v1/purchases/apple", { signed_transaction: signedTransaction }, { signal });
   }
 
   deleteAccount(signal?: AbortSignal): Promise<WeirgateResult<AccountDeletionResult>> {

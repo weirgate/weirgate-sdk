@@ -166,6 +166,13 @@ public struct Balance: Codable, Sendable, Equatable {
     /// this user. A new user row (an anonymous user after reinstall, or after account
     /// deletion) has a new token.
     public let appAccountToken: UUID
+    /// Unspent monthly allowance of a plan whose allowance resets each UTC month
+    /// (`allowance_rollover: expire`). Never negative; 0 on plans whose allowance carries over.
+    /// Spent first. `allowanceAvailable + purchasedAvailable == unitsAvailable`.
+    public let allowanceAvailable: Double
+    /// Everything that never expires: purchased credit packs, welcome and manual grants,
+    /// carried-over allowance, and adjustments. Can be negative after a refund or clawback.
+    public let purchasedAvailable: Double
 
     public init(
         unitsAvailable: Double,
@@ -173,7 +180,9 @@ public struct Balance: Codable, Sendable, Equatable {
         tier: String,
         unlimited: Bool = false,
         unlimitedUntil: Date? = nil,
-        appAccountToken: UUID
+        appAccountToken: UUID,
+        allowanceAvailable: Double = 0,
+        purchasedAvailable: Double? = nil
     ) {
         self.unitsAvailable = unitsAvailable
         self.unitsPending = unitsPending
@@ -181,6 +190,8 @@ public struct Balance: Codable, Sendable, Equatable {
         self.unlimited = unlimited
         self.unlimitedUntil = unlimitedUntil
         self.appAccountToken = appAccountToken
+        self.allowanceAvailable = allowanceAvailable
+        self.purchasedAvailable = purchasedAvailable ?? unitsAvailable - allowanceAvailable
     }
 
     public init(from decoder: Decoder) throws {
@@ -192,6 +203,9 @@ public struct Balance: Codable, Sendable, Equatable {
         unlimitedUntil = try container.decodeIfPresent(String.self, forKey: .unlimitedUntil)
             .map { try WeirgateTimestamp.date(from: $0, codingPath: container.codingPath + [CodingKeys.unlimitedUntil]) }
         appAccountToken = try container.decode(UUID.self, forKey: .appAccountToken)
+        allowanceAvailable = try container.decodeIfPresent(Double.self, forKey: .allowanceAvailable) ?? 0
+        purchasedAvailable = try container.decodeIfPresent(Double.self, forKey: .purchasedAvailable)
+            ?? unitsAvailable - allowanceAvailable
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -202,6 +216,8 @@ public struct Balance: Codable, Sendable, Equatable {
         try container.encode(unlimited, forKey: .unlimited)
         try container.encode(unlimitedUntil.map(WeirgateTimestamp.string(from:)), forKey: .unlimitedUntil)
         try container.encode(appAccountToken, forKey: .appAccountToken)
+        try container.encode(allowanceAvailable, forKey: .allowanceAvailable)
+        try container.encode(purchasedAvailable, forKey: .purchasedAvailable)
     }
 
     enum CodingKeys: String, CodingKey {
@@ -210,6 +226,8 @@ public struct Balance: Codable, Sendable, Equatable {
         case unitsPending = "units_pending"
         case unlimitedUntil = "unlimited_until"
         case appAccountToken = "app_account_token"
+        case allowanceAvailable = "allowance_available"
+        case purchasedAvailable = "purchased_available"
     }
 }
 
@@ -281,11 +299,73 @@ public struct WelcomeCreditsClaim: Codable, Sendable, Equatable {
 /// transaction after receiving this value (either status).
 public struct PurchaseRedemption: Codable, Sendable, Equatable {
     public enum Status: String, Codable, Sendable, Equatable {
-        /// This call credited the caller.
+        /// This call credited the caller (consumable), or recorded the subscription period for
+        /// the caller (subscription).
         case granted
-        /// The transaction was credited earlier (by an earlier call or an App Store
-        /// notification). ``PurchaseRedemption/units`` is what the caller received from it.
+        /// The transaction was handled earlier (by an earlier call or an App Store
+        /// notification). For a consumable, ``PurchaseRedemption/units`` is what the caller
+        /// received from it. Also returned for older subscription periods.
         case alreadyGranted = "already_granted"
+    }
+
+    public enum Kind: String, Codable, Sendable, Equatable {
+        /// A Consumable product: credits.
+        case consumable
+        /// An Auto-Renewable Subscription product: a plan while the subscription is active.
+        case subscription
+    }
+
+    /// The subscription a redeemed Auto-Renewable Subscription transaction belongs to.
+    public struct Subscription: Codable, Sendable, Equatable {
+        public enum Status: String, Codable, Sendable, Equatable {
+            case active, expired, revoked, refunded
+        }
+
+        /// The plan the product maps to; `nil` if it is no longer configured.
+        public let tier: String?
+        public let status: Status
+        /// When the plan ends: the period end, or the billing grace period end if later.
+        public let expiresAt: Date
+        /// True while the subscription entitles the user to its plan.
+        public let active: Bool
+        /// False when a higher-ranked plan assigned by the developer is in effect; the
+        /// subscription's plan applies when that ends.
+        public let planApplied: Bool
+
+        public init(tier: String?, status: Status, expiresAt: Date, active: Bool, planApplied: Bool) {
+            self.tier = tier
+            self.status = status
+            self.expiresAt = expiresAt
+            self.active = active
+            self.planApplied = planApplied
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            tier = try container.decodeIfPresent(String.self, forKey: .tier)
+            status = try container.decode(Status.self, forKey: .status)
+            expiresAt = try WeirgateTimestamp.date(
+                from: try container.decode(String.self, forKey: .expiresAt),
+                codingPath: container.codingPath + [CodingKeys.expiresAt]
+            )
+            active = try container.decode(Bool.self, forKey: .active)
+            planApplied = try container.decode(Bool.self, forKey: .planApplied)
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(tier, forKey: .tier)
+            try container.encode(status, forKey: .status)
+            try container.encode(WeirgateTimestamp.string(from: expiresAt), forKey: .expiresAt)
+            try container.encode(active, forKey: .active)
+            try container.encode(planApplied, forKey: .planApplied)
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case tier, status, active
+            case expiresAt = "expires_at"
+            case planApplied = "plan_applied"
+        }
     }
 
     public enum Environment: String, Codable, Sendable, Equatable {
@@ -306,6 +386,15 @@ public struct PurchaseRedemption: Codable, Sendable, Equatable {
     public let environment: Environment
     public let unitsAvailable: Double
     public let unitsPending: Double
+    /// `.consumable` unless the product is configured as a subscription.
+    public let kind: Kind
+    /// Subscriptions only.
+    public let originalTransactionID: String?
+    /// Subscriptions only: the caller's tier after the redeem.
+    public let tier: String?
+    /// Subscriptions only; `nil` for consumables and when another user of the app owns the
+    /// subscription.
+    public let subscription: Subscription?
 
     public init(
         status: Status,
@@ -315,7 +404,11 @@ public struct PurchaseRedemption: Codable, Sendable, Equatable {
         productID: String,
         environment: Environment,
         unitsAvailable: Double,
-        unitsPending: Double = 0
+        unitsPending: Double = 0,
+        kind: Kind = .consumable,
+        originalTransactionID: String? = nil,
+        tier: String? = nil,
+        subscription: Subscription? = nil
     ) {
         self.status = status
         self.units = units
@@ -325,15 +418,36 @@ public struct PurchaseRedemption: Codable, Sendable, Equatable {
         self.environment = environment
         self.unitsAvailable = unitsAvailable
         self.unitsPending = unitsPending
+        self.kind = kind
+        self.originalTransactionID = originalTransactionID
+        self.tier = tier
+        self.subscription = subscription
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        status = try container.decode(Status.self, forKey: .status)
+        units = try container.decode(Double.self, forKey: .units)
+        grantID = try container.decodeIfPresent(String.self, forKey: .grantID)
+        transactionID = try container.decode(String.self, forKey: .transactionID)
+        productID = try container.decode(String.self, forKey: .productID)
+        environment = try container.decode(Environment.self, forKey: .environment)
+        unitsAvailable = try container.decode(Double.self, forKey: .unitsAvailable)
+        unitsPending = try container.decode(Double.self, forKey: .unitsPending)
+        kind = try container.decodeIfPresent(Kind.self, forKey: .kind) ?? .consumable
+        originalTransactionID = try container.decodeIfPresent(String.self, forKey: .originalTransactionID)
+        tier = try container.decodeIfPresent(String.self, forKey: .tier)
+        subscription = try container.decodeIfPresent(Subscription.self, forKey: .subscription)
     }
 
     enum CodingKeys: String, CodingKey {
-        case status, units, environment
+        case status, units, environment, kind, tier, subscription
         case grantID = "grant_id"
         case transactionID = "transaction_id"
         case productID = "product_id"
         case unitsAvailable = "units_available"
         case unitsPending = "units_pending"
+        case originalTransactionID = "original_transaction_id"
     }
 }
 
