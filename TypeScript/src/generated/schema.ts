@@ -1521,7 +1521,7 @@ export interface components {
         BillingRedirect: {
             /** Format: uri */
             url: string;
-            sessionId: string;
+            session_id: string;
         };
         BillingPortalRedirect: {
             /** Format: uri */
@@ -1597,10 +1597,10 @@ export interface components {
             warning_at: number;
         };
         BillingTierPosture: {
-            monthlyFeeUsd: number;
-            includedCalls: number;
-            includedTokens: number;
-            blocksAtCap: boolean;
+            monthly_fee_usd: number;
+            included_calls: number;
+            included_tokens: number;
+            blocks_at_cap: boolean;
         };
         BillingInvoice: {
             id: string;
@@ -1618,10 +1618,23 @@ export interface components {
             /** @enum {string} */
             mode: "test" | "live";
             version: string;
-            products: components["schemas"]["GenericObject"];
-            prices: components["schemas"]["GenericObject"];
-            coupons: components["schemas"]["GenericObject"];
-            portalConfigurationId: string;
+            products: {
+                free: string;
+                pro: string;
+                scale: string;
+            };
+            prices: {
+                free: string;
+                pro: string;
+                scale: string;
+                call_overage: string;
+                token_overage: string;
+            };
+            coupons: {
+                free_60_days: string;
+                half_through_month_6: string;
+            };
+            portal_configuration_id: string;
         };
         BillingStatementClose: {
             draft: components["schemas"]["BillingStatement"];
@@ -1957,24 +1970,24 @@ export interface components {
         };
         PaymentTransaction: {
             id: string;
-            appId: components["schemas"]["AppId"];
+            app_id: components["schemas"]["AppId"];
             /** @description Null for a purchase first seen in a refund notification. */
-            userId: string | null;
+            user_id: string | null;
             /** @description Null when unowned or the user was anonymized. */
-            externalId: string | null;
+            external_id: string | null;
             /** @enum {string} */
             provider: "apple";
-            providerTransactionId: string;
-            originalTransactionId: string | null;
-            productId: string;
+            provider_transaction_id: string;
+            original_transaction_id: string | null;
+            product_id: string;
             units: number;
             /** @enum {string} */
             environment: "test" | "live";
             /** @enum {string} */
             status: "granted" | "refunded" | "refund_reversed";
             /** @description The grant currently tied to the purchase. */
-            grantId: string | null;
-            refundCount: number;
+            grant_id: string | null;
+            refund_count: number;
             /**
              * @description subscription rows are one period of an auto-renewable subscription; they grant a plan
              * @enum {string}
@@ -1982,12 +1995,15 @@ export interface components {
             kind: "consumable" | "subscription";
             /** @description Subscription periods only */
             tier: string | null;
-            /** @description Subscription periods only */
-            expiresAt: number | null;
-            /** @description Unix epoch milliseconds */
-            createdAt: number;
-            /** @description Unix epoch milliseconds */
-            updatedAt: number;
+            /**
+             * Format: date-time
+             * @description Subscription periods only
+             */
+            expires_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
         };
         /** @description One auto-renewable subscription, keyed by original transaction ID. active is true while status is active, the tier is configured, and max(expires_at, grace_expires_at) is in the future. */
         PaymentSubscription: {
@@ -2117,6 +2133,22 @@ export interface components {
                 project_id: string;
             } | {
                 /** @constant */
+                mode: "jwks";
+                /** Format: uri */
+                issuer: string;
+                /**
+                 * Format: uri
+                 * @description Public HTTPS URL outside local and private ranges.
+                 */
+                jwks_url: string;
+                audience?: string | string[];
+                /**
+                 * @description Token claim used as the external user ID.
+                 * @default sub
+                 */
+                external_id_claim: string;
+            } | {
+                /** @constant */
                 mode: "dev";
             };
             default_tier: string;
@@ -2231,6 +2263,7 @@ export interface components {
              */
             scope: "read" | "propose" | "apply";
             app_ids: string[];
+            /** @description One or more of identity, setup, docs, audit, usage, rules, webhooks, credits, plans, billing, keys, provider_keys, privacy, sandbox, or the wildcard * alone. Any other name is invalid_request with detail.reason unknown_tool_group. */
             tool_groups: string[];
             /** @enum {string} */
             environment: "test" | "live";
@@ -2249,6 +2282,7 @@ export interface components {
              */
             scope: "read" | "propose" | "apply";
             app_ids: string[];
+            /** @description One or more of identity, setup, docs, audit, usage, rules, webhooks, credits, plans, billing, keys, provider_keys, privacy, sandbox, or the wildcard * alone. Any other name is invalid_request with detail.reason unknown_tool_group. */
             tool_groups: string[];
             /**
              * @default test
@@ -2356,15 +2390,15 @@ export interface components {
         };
         CreditAdjustmentRow: {
             id: string;
-            appId: components["schemas"]["AppId"];
-            userId: string;
+            app_id: components["schemas"]["AppId"];
+            user_id: string;
             units: number;
             reason: string;
             source: string | null;
-            idempotencyKey: string;
+            idempotency_key: string;
             actor: components["schemas"]["GenericObject"] | null;
-            /** @description Unix epoch milliseconds */
-            createdAt: number;
+            /** Format: date-time */
+            created_at: string;
         };
         GrantInput: {
             units: number;
@@ -2571,14 +2605,14 @@ export interface components {
         };
         GrantRow: {
             id: string;
-            appId: components["schemas"]["AppId"];
-            userId: string;
+            app_id: components["schemas"]["AppId"];
+            user_id: string;
             units: number;
             source: string;
-            idempotencyKey: string;
+            idempotency_key: string;
             reversed: boolean;
-            /** @description Unix epoch milliseconds */
-            createdAt: number;
+            /** Format: date-time */
+            created_at: string;
         };
         UserTierAssignmentInput: {
             /** @description A tier configured on the target app. */
@@ -2597,25 +2631,28 @@ export interface components {
         };
         UserTierChangeRow: {
             id: string;
-            appId: components["schemas"]["AppId"];
-            userId: string;
+            app_id: components["schemas"]["AppId"];
+            user_id: string;
             /**
              * @description expire means a time-limited assignment ended and the user returned to the app's default tier.
              * @enum {string}
              */
             operation: "assign" | "revert" | "expire";
-            /** @description End of the assignment this change made (Unix epoch milliseconds). */
-            expiresAt: number | null;
-            previousTier: string;
-            targetTier: string;
-            effectivePeriod: string;
-            topUpNow: boolean;
-            topUpPeriod: string;
-            topUpUnits: number;
-            topUpGrantId: string | null;
-            idempotencyKey: string;
-            /** @description Unix epoch milliseconds */
-            createdAt: number;
+            /**
+             * Format: date-time
+             * @description End of the assignment this change made.
+             */
+            expires_at: string | null;
+            previous_tier: string;
+            target_tier: string;
+            effective_period: string;
+            top_up_now: boolean;
+            top_up_period: string;
+            top_up_units: number;
+            top_up_grant_id: string | null;
+            idempotency_key: string;
+            /** Format: date-time */
+            created_at: string;
         };
         StoreBalance: {
             available: number;
@@ -2752,45 +2789,57 @@ export interface components {
         };
         UserRow: {
             id: string;
-            appId: components["schemas"]["AppId"];
-            externalId: string | null;
+            app_id: components["schemas"]["AppId"];
+            external_id: string | null;
             tier: string;
-            pendingTier: string | null;
-            pendingTierEffectivePeriod: string | null;
+            pending_tier: string | null;
+            pending_tier_effective_period: string | null;
             anonymous: boolean;
-            /** @description Unix epoch milliseconds */
-            anonymizedAt: number | null;
-            /** @description End of the active tier assignment (Unix epoch milliseconds). */
-            tierExpiresAt: number | null;
-            /** @description End of the pending tier assignment (Unix epoch milliseconds). */
-            pendingTierExpiresAt: number | null;
+            /** Format: date-time */
+            anonymized_at: string | null;
+            /**
+             * Format: date-time
+             * @description End of the active tier assignment.
+             */
+            tier_expires_at: string | null;
+            /**
+             * Format: date-time
+             * @description End of the pending tier assignment.
+             */
+            pending_tier_expires_at: string | null;
             /**
              * Format: uuid
              * @description The user's StoreKit appAccountToken (same value as GET /v1/balance app_account_token).
              */
-            appAccountToken: string;
+            app_account_token: string;
             /** @description The store subscription that set the active tier; null for manual assignments and the default tier. */
-            tierSubscriptionId: string | null;
+            tier_subscription_id: string | null;
         };
         /** @description UserRow plus the user's unlimited state and balance split, matching the single-user read's UserBalance (allowance_available + purchased_available = available). */
         UserListRow: {
             id: string;
-            appId: components["schemas"]["AppId"];
-            externalId: string | null;
+            app_id: components["schemas"]["AppId"];
+            external_id: string | null;
             tier: string;
-            pendingTier: string | null;
-            pendingTierEffectivePeriod: string | null;
+            pending_tier: string | null;
+            pending_tier_effective_period: string | null;
             anonymous: boolean;
-            /** @description Unix epoch milliseconds */
-            anonymizedAt: number | null;
-            /** @description End of the active tier assignment (Unix epoch milliseconds). */
-            tierExpiresAt: number | null;
-            /** @description End of the pending tier assignment (Unix epoch milliseconds). */
-            pendingTierExpiresAt: number | null;
+            /** Format: date-time */
+            anonymized_at: string | null;
+            /**
+             * Format: date-time
+             * @description End of the active tier assignment.
+             */
+            tier_expires_at: string | null;
+            /**
+             * Format: date-time
+             * @description End of the pending tier assignment.
+             */
+            pending_tier_expires_at: string | null;
             /** Format: uuid */
-            appAccountToken: string;
+            app_account_token: string;
             /** @description The store subscription that set the active tier; null for manual assignments and the default tier. */
-            tierSubscriptionId: string | null;
+            tier_subscription_id: string | null;
             /** @description True while the active tier is unlimited and its assignment has not ended. */
             unlimited: boolean;
             /**
@@ -2848,13 +2897,85 @@ export interface components {
         };
         SandboxSession: {
             id: string;
-            appId: components["schemas"]["AppId"];
+            app_id: components["schemas"]["AppId"];
             name: string;
-            /** @description Unix epoch milliseconds */
-            createdAt: number;
             /** Format: date-time */
-            created_at?: string;
-            runs?: components["schemas"]["GenericObject"][];
+            created_at: string;
+            /** @description Present on GET; the session's runs, oldest first. */
+            runs?: components["schemas"]["SandboxRun"][];
+        };
+        SandboxRun: {
+            id: string;
+            session_id: string;
+            app_id: components["schemas"]["AppId"];
+            fixture: string;
+            request_id: components["schemas"]["RequestId"];
+            /** @description The sandbox user; set only for the success fixture. */
+            user_id: string | null;
+            /** @description Set only for the success fixture. */
+            reservation_id: string | null;
+            /** @description The typed error an error fixture rehearses. */
+            error_type: string | null;
+            /** @constant */
+            status: "passed";
+            /** @constant */
+            provider_cost_usd: 0;
+            /** @constant */
+            units_debited: 0;
+            /** Format: date-time */
+            created_at: string;
+        };
+        /** @description One settled metered request. */
+        UsageEvent: {
+            id: string;
+            app_id: components["schemas"]["AppId"];
+            user_id: string;
+            feature_id: string;
+            model: string;
+            modality: string;
+            units_debited: number;
+            prompt_tokens: number;
+            completion_tokens: number;
+            /** @description Cost the app owner bore; null when unknown. */
+            provider_cost_usd: number | null;
+            /** @description Cost the end user bore on a user-funded rail; null when unknown or not user-funded. */
+            user_cost_usd: number | null;
+            latency_ms: number;
+            /** @enum {string} */
+            key_source: "developer" | "user";
+            funding_rail: components["schemas"]["FundingRail"];
+            /** @description Plan provider for the user_plan rail; null otherwise. */
+            funding_provider: string | null;
+            /** @description The rail that refused earlier in the same request, when a fallback happened. */
+            fallback_from: components["schemas"]["FundingRail"] | null;
+            /** @description The typed refusal reason that caused the fallback. */
+            refusal_code: string | null;
+            /** @description What the request would have cost the developer at list price; null when unknown. */
+            list_price_usd: number | null;
+            /** @description Tier snapshot at settlement; null only for pre-migration rows. */
+            tier: string | null;
+            request_id: components["schemas"]["RequestId"];
+            /** Format: date-time */
+            created_at: string;
+        };
+        /** @description One client timing report accepted by POST /v1/telemetry/client. */
+        ClientTelemetryEvent: {
+            id: string;
+            app_id: components["schemas"]["AppId"];
+            user_id: string;
+            request_id: components["schemas"]["RequestId"];
+            event_id: string;
+            /** @constant */
+            event_type: "timing";
+            ttft_ms: number;
+            content_complete_ms: number | null;
+            sdk_name: string | null;
+            sdk_version: string | null;
+            server_latency_ms: number;
+            /** @description False when TTFT exceeds max(5 × server latency */
+            ttft_sane: boolean;
+            /** Format: date-time */
+            created_at: string;
         };
         Readiness: {
             app_id: components["schemas"]["AppId"];
@@ -2879,8 +3000,8 @@ export interface components {
             auth: components["schemas"]["GenericObject"];
             server: components["schemas"]["GenericObject"] | null;
             money: components["schemas"]["GenericObject"] | null;
-            usage_event: components["schemas"]["GenericObject"] | null;
-            client_telemetry: components["schemas"]["GenericObject"] | null;
+            usage_event: components["schemas"]["UsageEvent"] | null;
+            client_telemetry: components["schemas"]["ClientTelemetryEvent"] | null;
         };
         IntegrationSnippet: {
             /** @constant */
@@ -3387,7 +3508,7 @@ export interface components {
                      */
                     tier_source: "manual" | "subscription";
                     subscriptions: components["schemas"]["PaymentSubscription"][];
-                    recent_events: components["schemas"]["GenericObject"][];
+                    recent_events: components["schemas"]["UsageEvent"][];
                     recent_events_pagination: components["schemas"]["Pagination"];
                 };
             };
@@ -3405,11 +3526,11 @@ export interface components {
                     balance: components["schemas"]["StoreBalance"];
                     grants: components["schemas"]["GrantRow"][];
                     adjustments: components["schemas"]["CreditAdjustmentRow"][];
-                    /** @description Store purchases tied to the user, including Apple's signed claims as held. */
+                    /** @description Store purchases tied to the user: the PaymentTransaction fields except external_id, plus raw_claims, Apple's signed transaction claims exactly as held (Apple's own camelCase keys and epoch-millisecond dates). */
                     purchases?: components["schemas"]["GenericObject"][];
                     subscriptions?: components["schemas"]["PaymentSubscription"][];
-                    usage: components["schemas"]["GenericObject"][];
-                    client_telemetry: components["schemas"]["GenericObject"][];
+                    usage: components["schemas"]["UsageEvent"][];
+                    client_telemetry: components["schemas"]["ClientTelemetryEvent"][];
                     /** Format: date-time */
                     exported_at: string;
                 };
@@ -3600,22 +3721,24 @@ export interface components {
             content: {
                 "application/json": {
                     id: string;
-                    sessionId: string;
-                    appId: components["schemas"]["AppId"];
+                    session_id: string;
+                    app_id: components["schemas"]["AppId"];
                     fixture: string;
-                    requestId: components["schemas"]["RequestId"];
+                    request_id: components["schemas"]["RequestId"];
+                    user_id: string | null;
+                    reservation_id: string | null;
+                    error_type: string | null;
                     /** @constant */
                     status: "passed";
                     /** @constant */
-                    providerCostUsd: 0;
+                    provider_cost_usd: 0;
                     /** @constant */
-                    unitsDebited: 0;
-                    createdAt: number;
+                    units_debited: 0;
+                    /** Format: date-time */
+                    created_at: string;
                     /** @constant */
                     billable: false;
                     outcome: components["schemas"]["GenericObject"];
-                } & {
-                    [key: string]: unknown;
                 };
             };
         };
@@ -4168,7 +4291,7 @@ export interface components {
         };
     };
     headers: {
-        /** @description Frozen calendar-date API contract version. */
+        /** @description Calendar-date API contract version. */
         WeirgateApiVersion: "2026-07-18";
         /** @description Correlation id with UUIDv4 randomness. */
         RequestId: components["schemas"]["RequestId"];
