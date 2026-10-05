@@ -159,7 +159,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/apple/notifications/{appId}": {
+    "/v1/apple/notifications/{app_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -421,7 +421,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/members/{developerIdentityId}": {
+    "/v1/admin/members/{developer_identity_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -475,7 +475,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/docs/{pageId}": {
+    "/v1/admin/docs/{page_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -640,7 +640,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/keys/{keyId}": {
+    "/v1/admin/keys/{key_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -657,7 +657,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/keys/{keyId}/rotate": {
+    "/v1/admin/keys/{key_id}/rotate": {
         parameters: {
             query?: never;
             header?: never;
@@ -677,7 +677,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/webhook-proposals": {
+    "/v1/admin/apps/{app_id}/webhook-proposals": {
         parameters: {
             query?: never;
             header?: never;
@@ -688,7 +688,7 @@ export interface paths {
         put?: never;
         /**
          * Propose a webhook endpoint update or delete
-         * @description Proposals cover `update` and `delete` only. Creating an endpoint mints a reveal-once signing secret, which an apply response never returns, so endpoints are created with `POST /v1/admin/apps/{appId}/webhooks` instead; `operation: create` is rejected with `invalid_request`.
+         * @description Proposals cover `update` and `delete` only. Creating an endpoint mints a reveal-once signing secret, which an apply response never returns, so endpoints are created with `POST /v1/admin/apps/{app_id}/webhooks` instead; `operation: create` is rejected with `invalid_request`.
          */
         post: operations["createWebhookProposal"];
         delete?: never;
@@ -714,7 +714,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/webhook-proposals/{proposalId}": {
+    "/v1/admin/webhook-proposals/{proposal_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -731,7 +731,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/webhook-proposals/{proposalId}/apply": {
+    "/v1/admin/webhook-proposals/{proposal_id}/apply": {
         parameters: {
             query?: never;
             header?: never;
@@ -748,7 +748,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/webhook-proposals/{proposalId}/cancel": {
+    "/v1/admin/webhook-proposals/{proposal_id}/cancel": {
         parameters: {
             query?: never;
             header?: never;
@@ -765,12 +765,12 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/webhooks": {
+    "/v1/admin/apps/{app_id}/webhooks": {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
             };
             cookie?: never;
         };
@@ -788,7 +788,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/webhooks/deliveries": {
+    "/v1/admin/apps/{app_id}/webhooks/deliveries": {
         parameters: {
             query?: never;
             header?: never;
@@ -805,7 +805,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/webhooks/deliveries/{deliveryId}/replay": {
+    "/v1/admin/apps/{app_id}/webhooks/deliveries/{delivery_id}/replay": {
         parameters: {
             query?: never;
             header?: never;
@@ -825,13 +825,13 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/webhooks/{endpointId}": {
+    "/v1/admin/apps/{app_id}/webhooks/{endpoint_id}": {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
-                endpointId: components["parameters"]["EndpointIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
+                endpoint_id: components["parameters"]["EndpointIdPath"];
             };
             cookie?: never;
         };
@@ -852,7 +852,7 @@ export interface paths {
         patch: operations["updateWebhook"];
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/webhooks/{endpointId}/rotate-secret": {
+    "/v1/admin/apps/{app_id}/webhooks/{endpoint_id}/rotate-secret": {
         parameters: {
             query?: never;
             header?: never;
@@ -872,7 +872,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/users/{externalId}/grants": {
+    "/v1/admin/apps/{app_id}/users/{external_id}/grants": {
         parameters: {
             query?: never;
             header?: never;
@@ -883,7 +883,7 @@ export interface paths {
         put?: never;
         /**
          * Grant units idempotently
-         * @description X-Idempotency-Key is canonical; body idempotency_key is a deprecated compatibility alias. Requires apply scope and the credits tool group. A reused key with the same body returns the original grant; the same key with a different body returns resource_conflict. Clerk dashboard sessions require recent second-factor verification.
+         * @description X-Idempotency-Key is required; a body idempotency_key is refused (invalid_request, detail.reason unknown_field). Requires apply scope and the credits tool group. A reused key with the same body returns the original grant; the same key with a different body returns resource_conflict. Clerk dashboard sessions require recent second-factor verification.
          */
         post: operations["createGrant"];
         delete?: never;
@@ -892,7 +892,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/users/{externalId}/adjustments": {
+    "/v1/admin/apps/{app_id}/users/{external_id}/adjustments": {
         parameters: {
             query?: never;
             header?: never;
@@ -912,7 +912,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/users/{externalId}/tier": {
+    "/v1/admin/apps/{app_id}/users/{external_id}/tier": {
         parameters: {
             query?: never;
             header: {
@@ -920,8 +920,8 @@ export interface paths {
                 "X-Idempotency-Key": components["parameters"]["XRequiredIdempotencyKey"];
             };
             path: {
-                appId: components["parameters"]["AppIdPath"];
-                externalId: components["parameters"]["ExternalIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
+                external_id: components["parameters"]["ExternalIdPath"];
             };
             cookie?: never;
         };
@@ -942,7 +942,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/grants/{grantId}/reverse": {
+    "/v1/admin/apps/{app_id}/grants/{grant_id}/reverse": {
         parameters: {
             query?: never;
             header?: never;
@@ -962,7 +962,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/usage": {
+    "/v1/admin/apps/{app_id}/usage": {
         parameters: {
             query?: never;
             header?: never;
@@ -979,7 +979,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/pricing-insights": {
+    "/v1/admin/apps/{app_id}/pricing-insights": {
         parameters: {
             query?: never;
             header?: never;
@@ -999,7 +999,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/rules": {
+    "/v1/admin/apps/{app_id}/rules": {
         parameters: {
             query?: never;
             header?: never;
@@ -1016,7 +1016,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/rules:preview": {
+    "/v1/admin/apps/{app_id}/rules:preview": {
         parameters: {
             query?: never;
             header?: never;
@@ -1036,7 +1036,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/rules/proposals": {
+    "/v1/admin/apps/{app_id}/rules/proposals": {
         parameters: {
             query?: never;
             header?: never;
@@ -1056,7 +1056,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/users": {
+    "/v1/admin/apps/{app_id}/users": {
         parameters: {
             query?: never;
             header?: never;
@@ -1076,7 +1076,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/purchases": {
+    "/v1/admin/apps/{app_id}/purchases": {
         parameters: {
             query?: never;
             header?: never;
@@ -1096,12 +1096,12 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/payments/apple/credentials": {
+    "/v1/admin/apps/{app_id}/payments/apple/credentials": {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
             };
             cookie?: never;
         };
@@ -1123,13 +1123,13 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/users/{externalId}": {
+    "/v1/admin/apps/{app_id}/users/{external_id}": {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
-                externalId: components["parameters"]["ExternalIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
+                external_id: components["parameters"]["ExternalIdPath"];
             };
             cookie?: never;
         };
@@ -1150,7 +1150,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/users/{externalId}/export": {
+    "/v1/admin/apps/{app_id}/users/{external_id}/export": {
         parameters: {
             query?: never;
             header?: never;
@@ -1209,7 +1209,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/config/proposals/{proposalId}": {
+    "/v1/admin/config/proposals/{proposal_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1226,7 +1226,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/config/proposals/{proposalId}/apply": {
+    "/v1/admin/config/proposals/{proposal_id}/apply": {
         parameters: {
             query?: never;
             header?: never;
@@ -1246,7 +1246,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/config/proposals/{proposalId}/cancel": {
+    "/v1/admin/config/proposals/{proposal_id}/cancel": {
         parameters: {
             query?: never;
             header?: never;
@@ -1280,7 +1280,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/doctor": {
+    "/v1/admin/apps/{app_id}/doctor": {
         parameters: {
             query?: never;
             header?: never;
@@ -1317,7 +1317,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/feature-templates/{templateId}/instantiate": {
+    "/v1/admin/apps/{app_id}/feature-templates/{template_id}/instantiate": {
         parameters: {
             query?: never;
             header?: never;
@@ -1334,7 +1334,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/sandbox/fixtures": {
+    "/v1/admin/apps/{app_id}/sandbox/fixtures": {
         parameters: {
             query?: never;
             header?: never;
@@ -1351,7 +1351,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/sandbox/sessions": {
+    "/v1/admin/apps/{app_id}/sandbox/sessions": {
         parameters: {
             query?: never;
             header?: never;
@@ -1371,7 +1371,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/sandbox/sessions/{sessionId}": {
+    "/v1/admin/apps/{app_id}/sandbox/sessions/{session_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1388,7 +1388,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/sandbox/sessions/{sessionId}/runs": {
+    "/v1/admin/apps/{app_id}/sandbox/sessions/{session_id}/runs": {
         parameters: {
             query?: never;
             header?: never;
@@ -1408,7 +1408,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/readiness": {
+    "/v1/admin/apps/{app_id}/readiness": {
         parameters: {
             query?: never;
             header?: never;
@@ -1425,7 +1425,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/request-traces/{requestId}": {
+    "/v1/admin/apps/{app_id}/request-traces/{request_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1442,7 +1442,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/apps/{appId}/integration-snippet": {
+    "/v1/admin/apps/{app_id}/integration-snippet": {
         parameters: {
             query?: never;
             header?: never;
@@ -2282,7 +2282,7 @@ export interface components {
             environment: "test" | "live";
             /**
              * Format: date-time
-             * @description Required for apply scope, except a credits-only key: tool_groups exactly [credits] and explicit app_ids (no wildcard). Such a key may be long-lived and is replaced with POST /v1/admin/keys/{keyId}/rotate.
+             * @description Required for apply scope, except a credits-only key: tool_groups exactly [credits] and explicit app_ids (no wildcard). Such a key may be long-lived and is replaced with POST /v1/admin/keys/{key_id}/rotate.
              */
             expires_at?: string;
             /** @description Must be true for apply scope. */
@@ -2416,11 +2416,6 @@ export interface components {
         GrantInput: {
             units: number;
             source?: string;
-            /**
-             * @deprecated
-             * @description Deprecated body alias; use X-Idempotency-Key. Removal requires a future breaking version.
-             */
-            idempotency_key?: string;
         };
         ConfigProposalCreated: {
             proposal_id: components["schemas"]["ProposalId"];
@@ -2532,7 +2527,7 @@ export interface components {
             /** Format: date-time */
             grace_until?: string | null;
             /**
-             * @description Optional key_source=user override; developer routes continue to use state.
+             * @description Optional override for user-funded routes (user_key and user_plan rails); developer-funded routes continue to use state.
              * @enum {string}
              */
             user_state?: "allowed" | "warning" | "blocked";
@@ -2957,8 +2952,6 @@ export interface components {
             /** @description Cost the end user bore on a user-funded rail; null when unknown or not user-funded. */
             user_cost_usd: number | null;
             latency_ms: number;
-            /** @enum {string} */
-            key_source: "developer" | "user";
             funding_rail: components["schemas"]["FundingRail"];
             /** @description Plan provider for the user_plan rail; null otherwise. */
             funding_provider: string | null;
@@ -4619,7 +4612,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
             };
             cookie?: never;
         };
@@ -5015,7 +5008,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                developerIdentityId: string;
+                developer_identity_id: string;
             };
             cookie?: never;
         };
@@ -5089,7 +5082,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                pageId: string;
+                page_id: string;
             };
             cookie?: never;
         };
@@ -5310,7 +5303,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                keyId: components["parameters"]["KeyIdPath"];
+                key_id: components["parameters"]["KeyIdPath"];
             };
             cookie?: never;
         };
@@ -5331,7 +5324,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                keyId: components["parameters"]["KeyIdPath"];
+                key_id: components["parameters"]["KeyIdPath"];
             };
             cookie?: never;
         };
@@ -5364,7 +5357,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
             };
             cookie?: never;
         };
@@ -5403,7 +5396,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                proposalId: components["parameters"]["ProposalIdPath"];
+                proposal_id: components["parameters"]["ProposalIdPath"];
             };
             cookie?: never;
         };
@@ -5423,7 +5416,7 @@ export interface operations {
                 "X-Idempotency-Key"?: components["parameters"]["XIdempotencyKey"];
             };
             path: {
-                proposalId: components["parameters"]["ProposalIdPath"];
+                proposal_id: components["parameters"]["ProposalIdPath"];
             };
             cookie?: never;
         };
@@ -5448,7 +5441,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                proposalId: components["parameters"]["ProposalIdPath"];
+                proposal_id: components["parameters"]["ProposalIdPath"];
             };
             cookie?: never;
         };
@@ -5466,7 +5459,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
             };
             cookie?: never;
         };
@@ -5483,7 +5476,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
             };
             cookie?: never;
         };
@@ -5503,7 +5496,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
             };
             cookie?: never;
         };
@@ -5520,8 +5513,8 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
-                deliveryId: components["parameters"]["DeliveryIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
+                delivery_id: components["parameters"]["DeliveryIdPath"];
             };
             cookie?: never;
         };
@@ -5538,8 +5531,8 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
-                endpointId: components["parameters"]["EndpointIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
+                endpoint_id: components["parameters"]["EndpointIdPath"];
             };
             cookie?: never;
         };
@@ -5556,8 +5549,8 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
-                endpointId: components["parameters"]["EndpointIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
+                endpoint_id: components["parameters"]["EndpointIdPath"];
             };
             cookie?: never;
         };
@@ -5575,8 +5568,8 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
-                endpointId: components["parameters"]["EndpointIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
+                endpoint_id: components["parameters"]["EndpointIdPath"];
             };
             cookie?: never;
         };
@@ -5592,13 +5585,13 @@ export interface operations {
     createGrant: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description Canonical idempotency carrier for retried mutations. On metered calls (chat, embeddings) a retry whose earlier attempt was refunded (a typed error such as user_credential_expired, an upstream failure, or a stream that ended early) runs as a new attempt and is settled and metered once; a retry of a settled attempt replays. */
-                "X-Idempotency-Key"?: components["parameters"]["XIdempotencyKey"];
+            header: {
+                /** @description Stable key that makes a tier mutation and optional top-up replay-safe. */
+                "X-Idempotency-Key": components["parameters"]["XRequiredIdempotencyKey"];
             };
             path: {
-                appId: components["parameters"]["AppIdPath"];
-                externalId: components["parameters"]["ExternalIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
+                external_id: components["parameters"]["ExternalIdPath"];
             };
             cookie?: never;
         };
@@ -5624,8 +5617,8 @@ export interface operations {
                 "X-Idempotency-Key": string;
             };
             path: {
-                appId: components["parameters"]["AppIdPath"];
-                externalId: components["parameters"]["ExternalIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
+                external_id: components["parameters"]["ExternalIdPath"];
             };
             cookie?: never;
         };
@@ -5652,8 +5645,8 @@ export interface operations {
                 "X-Idempotency-Key": components["parameters"]["XRequiredIdempotencyKey"];
             };
             path: {
-                appId: components["parameters"]["AppIdPath"];
-                externalId: components["parameters"]["ExternalIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
+                external_id: components["parameters"]["ExternalIdPath"];
             };
             cookie?: never;
         };
@@ -5679,8 +5672,8 @@ export interface operations {
                 "X-Idempotency-Key": components["parameters"]["XRequiredIdempotencyKey"];
             };
             path: {
-                appId: components["parameters"]["AppIdPath"];
-                externalId: components["parameters"]["ExternalIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
+                external_id: components["parameters"]["ExternalIdPath"];
             };
             cookie?: never;
         };
@@ -5706,8 +5699,8 @@ export interface operations {
                 "X-Idempotency-Key"?: components["parameters"]["XIdempotencyKey"];
             };
             path: {
-                appId: components["parameters"]["AppIdPath"];
-                grantId: components["parameters"]["GrantIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
+                grant_id: components["parameters"]["GrantIdPath"];
             };
             cookie?: never;
         };
@@ -5729,7 +5722,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
             };
             cookie?: never;
         };
@@ -5750,7 +5743,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
             };
             cookie?: never;
         };
@@ -5768,7 +5761,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
             };
             cookie?: never;
         };
@@ -5785,7 +5778,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
             };
             cookie?: never;
         };
@@ -5803,7 +5796,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
             };
             cookie?: never;
         };
@@ -5824,7 +5817,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
             };
             cookie?: never;
         };
@@ -5847,7 +5840,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
             };
             cookie?: never;
         };
@@ -5865,7 +5858,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
             };
             cookie?: never;
         };
@@ -5882,7 +5875,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
             };
             cookie?: never;
         };
@@ -5905,7 +5898,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
             };
             cookie?: never;
         };
@@ -5922,8 +5915,8 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
-                externalId: components["parameters"]["ExternalIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
+                external_id: components["parameters"]["ExternalIdPath"];
             };
             cookie?: never;
         };
@@ -5940,8 +5933,8 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
-                externalId: components["parameters"]["ExternalIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
+                external_id: components["parameters"]["ExternalIdPath"];
             };
             cookie?: never;
         };
@@ -5958,8 +5951,8 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
-                externalId: components["parameters"]["ExternalIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
+                external_id: components["parameters"]["ExternalIdPath"];
             };
             cookie?: never;
         };
@@ -6062,7 +6055,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                proposalId: components["parameters"]["ProposalIdPath"];
+                proposal_id: components["parameters"]["ProposalIdPath"];
             };
             cookie?: never;
         };
@@ -6092,7 +6085,7 @@ export interface operations {
                 "X-Idempotency-Key"?: components["parameters"]["XIdempotencyKey"];
             };
             path: {
-                proposalId: components["parameters"]["ProposalIdPath"];
+                proposal_id: components["parameters"]["ProposalIdPath"];
             };
             cookie?: never;
         };
@@ -6127,7 +6120,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                proposalId: components["parameters"]["ProposalIdPath"];
+                proposal_id: components["parameters"]["ProposalIdPath"];
             };
             cookie?: never;
         };
@@ -6180,7 +6173,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
             };
             cookie?: never;
         };
@@ -6212,8 +6205,8 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
-                templateId: components["parameters"]["TemplateIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
+                template_id: components["parameters"]["TemplateIdPath"];
             };
             cookie?: never;
         };
@@ -6231,7 +6224,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
             };
             cookie?: never;
         };
@@ -6248,7 +6241,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
             };
             cookie?: never;
         };
@@ -6266,8 +6259,8 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
-                sessionId: components["parameters"]["SessionIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
+                session_id: components["parameters"]["SessionIdPath"];
             };
             cookie?: never;
         };
@@ -6284,8 +6277,8 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
-                sessionId: components["parameters"]["SessionIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
+                session_id: components["parameters"]["SessionIdPath"];
             };
             cookie?: never;
         };
@@ -6303,7 +6296,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
             };
             cookie?: never;
         };
@@ -6320,8 +6313,8 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
-                requestId: components["parameters"]["RequestIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
+                request_id: components["parameters"]["RequestIdPath"];
             };
             cookie?: never;
         };
@@ -6341,7 +6334,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                appId: components["parameters"]["AppIdPath"];
+                app_id: components["parameters"]["AppIdPath"];
             };
             cookie?: never;
         };
