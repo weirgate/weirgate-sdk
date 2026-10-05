@@ -2,13 +2,15 @@
 
 All notable public SDK changes are recorded here.
 
-## Unreleased
+## @weirgate/sdk 0.7.0 and WeirgateKit 0.6.0 — 2026-10-05
 
-Spec provenance moves to weirgate `8ad6ea7` (both SDKs). The API now documents its
-growth-prone enums as open-ended (weirgate#177), so new error types and new values can
-arrive without a version change.
+The API contract cleanup before GA (weirgate#174, #177, #180, #181, #182). Spec provenance
+moves to weirgate `dd685e8` (both SDKs). The API now documents its growth-prone enums as
+open-ended (weirgate#177), so new error types and new values can arrive without a version
+change. Minor bumps: a new enum case (Swift, source-breaking for exhaustive switches) and
+changed types (TypeScript). No call signatures changed.
 
-### Swift (next: WeirgateKit 0.6.0)
+### Swift (WeirgateKit 0.6.0)
 
 - **Source-breaking:** `WeirgateErrorType` gains `.unrecognized`, used for an error type
   newer than the SDK; exhaustive `switch error.type` statements need a `default:` (or an
@@ -20,14 +22,22 @@ arrive without a version change.
 - `PurchaseRedemption.Kind` gains `.unrecognized`, so a redeem with a newer product kind
   still decodes instead of failing after the server handled it.
 
-### TypeScript (next: @weirgate/sdk 0.7.0)
+### TypeScript (@weirgate/sdk 0.7.0)
 
 - `WeirgateError.type` is now `WeirgateErrorKind` (`ErrorType | "unrecognized"`); an error
   type newer than the SDK is `"unrecognized"` instead of `"internal"`. Exhaustiveness
   checks on `error.type` (a `never` default) need an `"unrecognized"` case. New
   `WeirgateError.rawType` keeps the server's value (also on mid-stream error frames).
-- Regenerated types from weirgate `8ad6ea7`: doc comments only (open-ended enums, config
-  writes rejecting unknown fields).
+- Regenerated types from weirgate `dd685e8` (pre-release changes):
+  - `GrantInput` no longer has `idempotency_key`; `createGrant` already sends the key as
+    the `X-Idempotency-Key` header, which grants now require (weirgate#180).
+  - Usage events (`getUserCredits().recent_events`, export, request traces) no longer
+    have `key_source`; read `funding_rail` (weirgate#181).
+  - Generated path-parameter names are snake_case (`app_id`, `external_id`, …;
+    weirgate#182). Only the generated `paths` / `operations` types change; the client's
+    methods are unchanged.
+  - Doc comments: open-ended enums (#177) and config writes that reject unknown fields
+    (#174).
 
 ## @weirgate/sdk 0.6.0 — 2026-10-05
 
