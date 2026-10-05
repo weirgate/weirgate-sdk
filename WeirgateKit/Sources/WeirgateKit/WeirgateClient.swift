@@ -269,7 +269,8 @@ public actor WeirgateClient {
                 } catch let frame as SSEContractAccumulator.ErrorFrame {
                     // A typed refusal after the stream started (x-weirgate-sse mid_stream_error).
                     let error = WeirgateError(
-                        type: WeirgateErrorType(rawValue: frame.type) ?? .internalError,
+                        type: WeirgateErrorType(serverValue: frame.type),
+                        rawType: frame.type,
                         statusCode: metadata.statusCode,
                         requestID: frame.requestID ?? metadata.requestID,
                         apiVersion: metadata.apiVersion,
@@ -520,10 +521,13 @@ public actor WeirgateClient {
         metadata: ResponseMetadata
     ) -> WeirgateError {
         let envelope = try? decoder.decode(ErrorEnvelope.self, from: data)
-        let headerType = response.value(forHTTPHeaderField: "X-Weirgate-Error-Type")
-            .flatMap(WeirgateErrorType.init(rawValue:))
+        // The header is authoritative; with neither header nor body the response isn't Weirgate's own.
+        let rawType = response.value(forHTTPHeaderField: "X-Weirgate-Error-Type")
+            ?? envelope?.error.type
+            ?? WeirgateErrorType.internalError.rawValue
         return WeirgateError(
-            type: headerType ?? envelope?.error.type ?? .internalError,
+            type: WeirgateErrorType(serverValue: rawType),
+            rawType: rawType,
             statusCode: response.statusCode,
             requestID: metadata.requestID,
             apiVersion: metadata.apiVersion,

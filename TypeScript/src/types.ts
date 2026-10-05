@@ -83,6 +83,12 @@ export const ERROR_TYPES = [
   "internal",
 ] as const satisfies readonly ErrorType[];
 
+/**
+ * `WeirgateError.type`: a type this SDK version knows, or `"unrecognized"` for one the
+ * server added later (`ErrorType` is open-ended). The server's value is in `rawType`.
+ */
+export type WeirgateErrorKind = ErrorType | "unrecognized";
+
 export function isErrorType(value: unknown): value is ErrorType {
   return typeof value === "string" && (ERROR_TYPES as readonly string[]).includes(value);
 }

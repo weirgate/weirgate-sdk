@@ -319,6 +319,9 @@ inside the request).
 logged by the package, and requests use an ephemeral URL session with no URL cache. Plan
 access tokens are sent per request and stored only by `PlanConnect`'s token store.
 Typed HTTP failures use `WeirgateError.type`; consumers never inspect message strings.
+The API can add error types without a version change: a type newer than the SDK is
+`.unrecognized`, with the server's value in `WeirgateError.rawType`. Handle it by
+`statusCode`, and give `switch error.type` a `default:` case.
 
 See the [SDK guide](https://weirgate.com/guides/sdks/) and
 [API reference](https://weirgate.com/reference/api/) for the public contract.

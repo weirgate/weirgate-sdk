@@ -313,6 +313,14 @@ public struct PurchaseRedemption: Codable, Sendable, Equatable {
         case consumable
         /// An Auto-Renewable Subscription product: a plan while the subscription is active.
         case subscription
+        /// A product kind newer than this SDK (the API documents `kind` as open-ended). The
+        /// server handled the transaction; finish it as usual.
+        case unrecognized
+
+        public init(from decoder: Decoder) throws {
+            let value = try decoder.singleValueContainer().decode(String.self)
+            self = Kind(rawValue: value).flatMap { $0 == .unrecognized ? nil : $0 } ?? .unrecognized
+        }
     }
 
     /// The subscription a redeemed Auto-Renewable Subscription transaction belongs to.

@@ -364,6 +364,60 @@ describe("credits API", () => {
     expect(again).toMatchObject({ replacedByKeyId: "key_new" });
   });
 
+  it("reports an error type newer than the SDK as unrecognized, keeping the server's value", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
+      error: { type: "quota_frozen", message: "Quota is frozen", request_id: "req_body", detail: { reason: "audit_hold" } },
+    }, {
+      status: 409,
+      headers: { "X-Weirgate-Error-Type": "quota_frozen" },
+    }));
+    const client = new Weirgate({ appId: "example-app", token: "jwt", fetch: fetcher });
+
+    const error = await client.balance().catch((caught: unknown) => caught) as WeirgateError;
+    expect(error).toBeInstanceOf(WeirgateError);
+    expect(error).toMatchObject({
+      type: "unrecognized",
+      rawType: "quota_frozen",
+      status: 409,
+      message: "Quota is frozen",
+      detail: { reason: "audit_hold" },
+      requestId: "req_12345678",
+    });
+  });
+
+  it("keeps the raw type equal to the type for known errors, and internal for a non-Weirgate body", async () => {
+    const known = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
+      error: { type: "rate_limited", message: "slow down", request_id: "req_body" },
+    }, { status: 429 }));
+    const proxy = vi.fn<typeof fetch>().mockResolvedValue(new Response("Bad gateway", { status: 502, headers: responseHeaders }));
+
+    const knownError = await new Weirgate({ appId: "example-app", token: "jwt", fetch: known }).balance()
+      .catch((caught: unknown) => caught) as WeirgateError;
+    expect(knownError).toMatchObject({ type: "rate_limited", rawType: "rate_limited" });
+    const proxyError = await new Weirgate({ appId: "example-app", token: "jwt", fetch: proxy }).balance()
+      .catch((caught: unknown) => caught) as WeirgateError;
+    expect(proxyError).toMatchObject({ type: "internal", rawType: "internal", status: 502 });
+  });
+
+  it("reports an unrecognized type in a mid-stream error frame", async () => {
+    const sse = [
+      'data: {"id":"c1","object":"chat.completion.chunk","choices":[{"delta":{"content":"Hi"}}]}',
+      "",
+      'data: {"error":{"type":"quota_frozen","message":"Quota is frozen","request_id":"req_frame"}}',
+      "",
+    ].join("\n");
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(sse, {
+      headers: { ...responseHeaders, "Content-Type": "text/event-stream" },
+    }));
+    const client = new Weirgate({ appId: "example-app", token: "jwt", fetch: fetcher });
+
+    const stream = await client.streamChat("coach-chat", { messages: [{ role: "user", content: "hello" }] });
+    const failure = await (async () => { for await (const _chunk of stream.chunks) { /* drain */ } })()
+      .catch((caught: unknown) => caught);
+    expect(failure).toBeInstanceOf(WeirgateError);
+    expect(failure).toMatchObject({ type: "unrecognized", rawType: "quota_frozen", requestId: "req_frame" });
+  });
+
   it("lists every error type in the spec", () => {
     type Missing = Exclude<ErrorType, (typeof ERROR_TYPES)[number]>;
     const complete: [Missing] extends [never] ? true : false = true;

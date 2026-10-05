@@ -204,8 +204,57 @@ func errorRegistry() {
         "provider_unavailable", "purchase_invalid_signature", "purchase_wrong_app",
         "purchase_environment_mismatch", "purchase_unknown_product", "purchase_revoked",
         "purchase_account_mismatch", "funding_rail_refused", "funding_rail_unavailable",
-        "user_credential_expired", "internal"
+        "user_credential_expired", "internal", "unrecognized"
     ]))
+}
+
+@Test("an error type newer than the SDK is unrecognized and keeps the server's value, message, and detail")
+func unrecognizedErrorType() async throws {
+    let (client, tearDown) = stubbedClient { request in
+        errorResponse(request, status: 409, type: "quota_frozen", reason: "audit_hold")
+    }
+    defer { tearDown() }
+    do {
+        _ = try await client.balance()
+        Issue.record("expected an error")
+    } catch let error as WeirgateError {
+        #expect(error.type == .unrecognized)
+        #expect(error.rawType == "quota_frozen")
+        #expect(error.statusCode == 409)
+        #expect(error.serverMessage == "m")
+        #expect(error.reason == "audit_hold")
+        #expect(error.errorDescription == "Weirgate request failed with quota_frozen (HTTP 409).")
+    }
+    #expect(WeirgateErrorType(serverValue: "rate_limited") == .rateLimited)
+    #expect(WeirgateErrorType(serverValue: "unrecognized") == .unrecognized)
+}
+
+@Test("a known error keeps rawType equal to its raw value")
+func knownErrorRawType() async throws {
+    let (client, tearDown) = stubbedClient { request in
+        errorResponse(request, status: 429, type: "rate_limited")
+    }
+    defer { tearDown() }
+    do {
+        _ = try await client.balance()
+        Issue.record("expected an error")
+    } catch let error as WeirgateError {
+        #expect(error.type == .rateLimited)
+        #expect(error.rawType == "rate_limited")
+    }
+}
+
+@Test("a redeem with a product kind newer than the SDK still decodes")
+func unrecognizedRedemptionKind() async throws {
+    let (client, tearDown) = stubbedClient { request in
+        jsonResponse(request, body: #"""
+        {"status":"granted","kind":"bundle","units":0,"transaction_id":"2000000123","product_id":"p","environment":"test","units_available":5,"units_pending":0}
+        """#)
+    }
+    defer { tearDown() }
+    let redemption = try await client.redeemAppStoreTransaction(jws: "header.payload.signature").value
+    #expect(redemption.kind == .unrecognized)
+    #expect(redemption.status == .granted)
 }
 
 @Test("stream contract requires final usage, finish reason, and DONE")

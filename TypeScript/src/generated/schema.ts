@@ -1025,7 +1025,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Preview rules against recent traffic and bind a content hash */
+        /**
+         * Preview rules against recent traffic and bind a content hash
+         * @description Ruleset keys the schema doesn't define are refused with invalid_request, detail.reason unknown_field, and detail.unknown; an echoed revision is ignored.
+         */
         post: operations["previewRules"];
         delete?: never;
         options?: never;
@@ -1042,7 +1045,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create a preview-hash-bound rules proposal */
+        /**
+         * Create a preview-hash-bound rules proposal
+         * @description Ruleset keys the schema doesn't define are refused with invalid_request, detail.reason unknown_field, and detail.unknown; an echoed revision is ignored.
+         */
         post: operations["proposeRules"];
         delete?: never;
         options?: never;
@@ -1172,7 +1178,7 @@ export interface paths {
         get: operations["getConfig"];
         /**
          * Apply a config document directly with apply scope
-         * @description Ruleset changes are rejected and must use preview-bound proposals.
+         * @description Ruleset changes are rejected and must use preview-bound proposals. Keys the schema doesn't define are refused with invalid_request, detail.reason unknown_field, and detail.unknown (dotted paths), instead of being dropped; a value that fails validation lists detail.issues. A config read can be sent back unchanged: its read-only fields (revision, revisions, each feature's provider_policy, and funding.source) are ignored.
          */
         put: operations["applyConfigDirect"];
         post?: never;
@@ -1192,7 +1198,10 @@ export interface paths {
         /** List visible durable proposals across config, rules, and webhooks */
         get: operations["listConfigProposals"];
         put?: never;
-        /** Propose a tenant config against its current base revision */
+        /**
+         * Propose a tenant config against its current base revision
+         * @description Keys the schema doesn't define are refused with invalid_request, detail.reason unknown_field, and detail.unknown (dotted paths), instead of being dropped; a value that fails validation lists detail.issues. A config read can be sent back unchanged: its read-only fields (revision, revisions, each feature's provider_policy, and funding.source) are ignored.
+         */
         post: operations["createConfigProposal"];
         delete?: never;
         options?: never;
@@ -1743,13 +1752,17 @@ export interface components {
              */
             readonly source?: "order" | "key_policy" | "default";
         };
-        /** @enum {string} */
+        /**
+         * @description Documented as open-ended: new types may be added under the current version. A client that doesn't recognize a type handles it by HTTP status and keeps the value, the message, and the request ID for support; it must not treat it as `internal`.
+         * @enum {string}
+         */
         ErrorType: "invalid_request" | "invalid_token" | "user_provider_key_required" | "user_provider_key_invalid" | "insufficient_scope" | "out_of_allowance" | "insufficient_balance" | "abuse_blocked" | "feature_disabled" | "feature_not_found" | "resource_not_found" | "resource_conflict" | "provider_policy_blocked" | "output_contract_unsupported" | "output_contract_violation" | "proposal_stale" | "rate_limited" | "telemetry_request_unavailable" | "provider_unavailable" | "purchase_invalid_signature" | "purchase_wrong_app" | "purchase_environment_mismatch" | "purchase_unknown_product" | "purchase_revoked" | "purchase_account_mismatch" | "funding_rail_refused" | "funding_rail_unavailable" | "user_credential_expired" | "internal";
         ErrorEnvelope: {
             error: {
                 type: components["schemas"]["ErrorType"];
                 message: string;
                 request_id: components["schemas"]["RequestId"];
+                /** @description Type-specific detail, present for some types. `detail.reason`, when present, is a stable sub-code; documented as open-ended, so new reasons may be added under the current version. */
                 detail?: components["schemas"]["GenericObject"];
             };
         };
@@ -1935,7 +1948,7 @@ export interface components {
             units_available: number;
             units_pending: number;
             /**
-             * @description Present for subscription products (consumable responses omit it).
+             * @description Present for subscription products (consumable responses omit it). Documented as open-ended; new kinds may be added.
              * @enum {string}
              */
             kind?: "subscription";
@@ -2539,7 +2552,10 @@ export interface components {
                 xai: components["schemas"]["ProviderPolicyEntry"];
             };
         };
-        /** @enum {string} */
+        /**
+         * @description Documented as open-ended: new event types may be added under the current version. Consumers ignore types they don't handle (an endpoint created without `event_types` receives only the types that existed then).
+         * @enum {string}
+         */
         WebhookEventType: "allowance.low" | "allowance.exhausted" | "rule.breached" | "provider_policy.changed" | "grant.created" | "grant.reversed" | "credits.adjusted" | "tier.expiring" | "tier.expired" | "purchase.granted" | "purchase.refunded";
         WebhookEvent: {
             id: string;
@@ -2634,7 +2650,7 @@ export interface components {
             app_id: components["schemas"]["AppId"];
             user_id: string;
             /**
-             * @description expire means a time-limited assignment ended and the user returned to the app's default tier.
+             * @description expire means a time-limited assignment ended and the user returned to the app's default tier. Documented as open-ended; new operations may be added.
              * @enum {string}
              */
             operation: "assign" | "revert" | "expire";

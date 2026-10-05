@@ -2,6 +2,33 @@
 
 All notable public SDK changes are recorded here.
 
+## Unreleased
+
+Spec provenance moves to weirgate `8ad6ea7` (both SDKs). The API now documents its
+growth-prone enums as open-ended (weirgate#177), so new error types and new values can
+arrive without a version change.
+
+### Swift (next: WeirgateKit 0.6.0)
+
+- **Source-breaking:** `WeirgateErrorType` gains `.unrecognized`, used for an error type
+  newer than the SDK; exhaustive `switch error.type` statements need a `default:` (or an
+  `.unrecognized`) case. Previously such an error decoded as `.internalError` and lost its
+  message and `detail`.
+- `WeirgateError.rawType`: the type exactly as the server sent it. The message, `detail`,
+  and `reason` now survive for unrecognized types, and `errorDescription` names the raw type.
+- `WeirgateErrorType(serverValue:)` maps a server string to a known case or `.unrecognized`.
+- `PurchaseRedemption.Kind` gains `.unrecognized`, so a redeem with a newer product kind
+  still decodes instead of failing after the server handled it.
+
+### TypeScript (next: @weirgate/sdk 0.7.0)
+
+- `WeirgateError.type` is now `WeirgateErrorKind` (`ErrorType | "unrecognized"`); an error
+  type newer than the SDK is `"unrecognized"` instead of `"internal"`. Exhaustiveness
+  checks on `error.type` (a `never` default) need an `"unrecognized"` case. New
+  `WeirgateError.rawType` keeps the server's value (also on mid-stream error frames).
+- Regenerated types from weirgate `8ad6ea7`: doc comments only (open-ended enums, config
+  writes rejecting unknown fields).
+
 ## @weirgate/sdk 0.6.0 — 2026-10-05
 
 TypeScript only; WeirgateKit stays 0.5.0 (README fixes only, no code change). Spec
