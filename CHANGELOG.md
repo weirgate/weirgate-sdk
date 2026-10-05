@@ -4,6 +4,11 @@ All notable public SDK changes are recorded here.
 
 ## Unreleased
 
+- Generated types only: webhook proposals accept only `operation: "update" | "delete"` and
+  require `endpoint_id`. weirgate `9f5a4c5` (#132) rejects `create`, because its apply
+  minted a signing secret no response returned; create endpoints with
+  `POST /v1/admin/apps/{appId}/webhooks`, which returns the secret once. No hand-written
+  SDK method calls the proposal routes. Spec provenance moves to weirgate `9f5a4c5`.
 - Docs only, no code change: `assignUserTier` / `revertUserTier` need an admin key with
   the `plans` tool group, and `createGrant` / `reverseGrant` need `credits`; weirgate
   `b5d3702` (#122) no longer accepts `billing` for either. Spec provenance moves to
