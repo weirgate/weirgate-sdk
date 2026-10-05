@@ -21,8 +21,8 @@ change the frozen contract in this slice.
 5. Typed HTTP errors are available only before SSE headers are committed. A mid-stream
    upstream failure is necessarily a distinct transport/protocol error, so consumers
    must handle both the enumerable registry and an interrupted stream.
-6. Provider identifiers use `google` and `xai`, while Denali's established user-facing
-   names and feature IDs use Gemini and Grok. SDK consumers still need a presentation
+6. Provider identifiers use `google` and `xai`, while an app's user-facing
+   names and feature IDs may use Gemini and Grok. SDK consumers still need a presentation
    mapping without treating provider/model labels as capability identity.
 
 ## Funding rails (2026-10-03, weirgate `25282cf`)
