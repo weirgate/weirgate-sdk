@@ -2,12 +2,12 @@
 
 All notable public SDK changes are recorded here.
 
-## Unreleased
+## @weirgate/sdk 0.5.0 and WeirgateKit 0.5.0 — 2026-10-04
 
 App Store subscriptions (weirgate#90) and the balance split (weirgate#87), in one release
 (weirgate-sdk#25, folds in #24). Spec provenance moves to weirgate `91580ca`.
 
-### Swift (WeirgateKit, next minor)
+### Swift (WeirgateKit 0.5.0)
 
 - `Balance.allowanceAvailable` and `Balance.purchasedAvailable` (sum to `unitsAvailable`;
   `purchasedAvailable` can be negative). Decoded with a fallback (0 / `unitsAvailable`)
@@ -24,7 +24,7 @@ App Store subscriptions (weirgate#90) and the balance split (weirgate#87), in on
 - **Source-breaking:** `WeirgateStoreEvent.Source` gains `.currentEntitlements`; exhaustive
   switches need the new case.
 
-### TypeScript (@weirgate/sdk, next minor)
+### TypeScript (@weirgate/sdk 0.5.0)
 
 - `redeemAppleTransaction(signedTransaction)`: end-user redeem of a StoreKit 2 record
   (`POST /v1/purchases/apple`), returning `AppleRedemption`.
@@ -34,6 +34,8 @@ App Store subscriptions (weirgate#90) and the balance split (weirgate#87), in on
   `expiresAt`; `ConfigProposalCreated.warnings`; App Store products typed as consumable or
   subscription. New exported types `AppleRedemption`, `AppleSubscriptionState`,
   `PaymentTransaction`, `PaymentSubscription`, `PlanSource`.
+
+### Also in this release
 
 - Generated types only: webhook proposals accept only `operation: "update" | "delete"` and
   require `endpoint_id`. weirgate `9f5a4c5` (#132) rejects `create`, because its apply
