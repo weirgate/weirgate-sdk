@@ -2,6 +2,6 @@
   "api_version": "2026-07-18",
   "source_repository": "https://github.com/weirgate/weirgate",
   "source_path": "openapi.yaml",
-  "source_commit": "b5d37023c4112634800da9d9c5cfd15b9912792c",
+  "source_commit": "9f5a4c55f704318e36485b8fda3301f569ed55a5",
   "generator": "openapi-typescript"
 }

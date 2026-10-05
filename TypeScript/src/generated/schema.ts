@@ -685,7 +685,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Propose a durable webhook endpoint change without revealing a secret */
+        /**
+         * Propose a webhook endpoint update or delete
+         * @description Proposals cover `update` and `delete` only. Creating an endpoint mints a reveal-once signing secret, which an apply response never returns, so endpoints are created with `POST /v1/admin/apps/{appId}/webhooks` instead; `operation: create` is rejected with `invalid_request`.
+         */
         post: operations["createWebhookProposal"];
         delete?: never;
         options?: never;
@@ -2309,7 +2312,7 @@ export interface components {
             tenant_id: components["schemas"]["TenantId"];
             app_id: components["schemas"]["AppId"];
             /** @enum {string} */
-            operation: "create" | "update" | "delete";
+            operation: "update" | "delete";
             endpoint_id: string;
             /** Format: uri */
             url?: string;
@@ -2323,7 +2326,7 @@ export interface components {
             /** @constant */
             kind: "webhook";
             /** @enum {string} */
-            operation: "create" | "update" | "delete";
+            operation: "update" | "delete";
             endpoint_id: string;
             base_revision: number;
             content_hash: string;
@@ -4005,8 +4008,8 @@ export interface components {
             content: {
                 "application/json": {
                     /** @enum {string} */
-                    operation: "create" | "update" | "delete";
-                    endpoint_id?: string;
+                    operation: "update" | "delete";
+                    endpoint_id: string;
                     /** Format: uri */
                     url?: string;
                     event_types?: components["schemas"]["WebhookEventType"][];
