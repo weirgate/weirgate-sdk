@@ -1,6 +1,7 @@
 # `@weirgate/sdk`
 
-Typed TypeScript client for the public Weirgate API frozen at version `2026-07-18`.
+Typed TypeScript client for the public Weirgate API, contract version `2026-07-18`
+(pre-release; see the [API changelog](https://weirgate.com/reference/changelog/)).
 
 ```sh
 npm install @weirgate/sdk
@@ -19,7 +20,7 @@ if (catalog.kind === "modified") {
   console.log(catalog.data.data);
 }
 
-const stream = await client.streamChat("coach-chat", {
+const stream = await client.streamChat("assistant", {
   messages: [{ role: "user", content: "Hello" }],
 });
 for await (const chunk of stream.chunks) {
@@ -91,6 +92,10 @@ the subscription). Finish the transaction only after `granted` or `already_grant
 `purchase_revoked` error. See Weirgate's
 [App Store subscriptions guide](https://weirgate.com/guides/app-store-subscriptions/).
 
+Welcome credits have no TypeScript call yet: call `POST /v1/welcome-grant` with the
+end-user token (see the [welcome credits guide](https://weirgate.com/guides/welcome-credits/)),
+or use Swift's `claimWelcomeCredits`.
+
 ## Use the user's AI plan (web apps)
 
 A feature's funding chain decides who pays for each request: the user's AI plan
@@ -98,11 +103,13 @@ A feature's funding chain decides who pays for each request: the user's AI plan
 client a `planCredential` and it sends the user's ChatGPT plan token
 (`X-Weirgate-User-Credential`) to features whose catalog entry accepts it.
 
-**Status: not usable with real plans yet.** Plan usage in a paid or remotely hosted app
-needs OpenAI's partner approval, for Weirgate and for your app. Until Weirgate records your
-app as `approved`, live features answer `funding_rail_unavailable`; only mock features
-serve the rail. OpenAI has no plan-usage sandbox before approval, so this SDK is tested
-against recorded Weirgate responses, never a real plan.
+**Status: not yet available in production.** Work on plan usage is parked. Plan usage in a
+paid or remotely hosted app needs OpenAI's partner approval, for Weirgate and for your app.
+Until Weirgate records your app as `approved`, live features answer
+`funding_rail_unavailable` (they don't fall through to another rail), so don't send a plan
+credential to live features; only mock features serve the rail. OpenAI has no plan-usage
+sandbox before approval, so this SDK is tested against recorded Weirgate responses, never a
+real plan. The rest of this section describes the API as built.
 
 ```ts
 import { Weirgate, offersPlan, PlanReconnectRequiredError, FundingRailError } from "@weirgate/sdk";
@@ -295,7 +302,9 @@ correction, keyed by your own durable record ID (for example `order:${order.id}`
 ### Rotating the credits key
 
 ```ts
-const { data } = await admin.rotateAdminKey(keyId, { overlap_seconds: 86_400 });
+// Rotate with a key that holds the `keys` tool group, not the credits-only key.
+const keysAdmin = new Weirgate({ adminKey: process.env.WEIRGATE_KEYS_ADMIN_KEY });
+const { data } = await keysAdmin.rotateAdminKey(keyId, { overlap_seconds: 86_400 });
 // data.value is shown once: store it and deploy it. Before the overlap ends, check
 // that the old key's last_used_at (dashboard or GET /v1/admin/keys) stopped advancing.
 ```

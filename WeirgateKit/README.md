@@ -1,6 +1,7 @@
 # WeirgateKit
 
-Swift Package Manager client for the public Weirgate API frozen at version `2026-07-18`.
+Swift Package Manager client for the public Weirgate API, contract version `2026-07-18`
+(pre-release; see the [API changelog](https://weirgate.com/reference/changelog/)).
 
 Add `https://github.com/weirgate/weirgate-sdk.git` as a package dependency and select the
 `WeirgateKit` product. Apps that sell App Store credit packs or subscriptions also select `WeirgateStoreKit`.
@@ -15,11 +16,11 @@ let client = WeirgateClient(
 
 let catalog = try await client.features()
 let stream = try await client.streamChat(
-    featureID: "coach-chat",
+    featureID: "assistant",
     request: .init(messages: [.text(role: "user", content: "Hello")])
 )
 for try await chunk in stream.chunks {
-    // Render chunk.choices.first?.delta.content
+    // Render chunk.choices.first?.delta?.content
 }
 ```
 
@@ -205,7 +206,7 @@ whoever redeems it first, unless the app sets `require_app_account_token`.
 
 **Local StoreKit testing.** Transactions from an Xcode `.storekit` configuration are signed
 by Xcode, not Apple, so the real Weirgate server answers `purchase_invalid_signature`. That
-is expected: the observer reports `.rejected(.invalidSignature)` and leaves them unfinished.
+is expected: the observer reports `.rejected(error)` with `error.code == .invalidSignature` and leaves them unfinished.
 Test real redemption with App Store sandbox (a device build or TestFlight, without a
 `.storekit` file in the scheme); sandbox purchases are recorded as `environment: test`.
 
@@ -217,11 +218,13 @@ you (`developer`). `PlanConnect` lets the user connect their ChatGPT Plus or Pro
 Sign in with ChatGPT, and `WeirgateClient` then sends the plan's token with each request to
 features that accept it.
 
-**Status: not usable with real plans yet.** Plan usage in a paid or remotely hosted app
-needs OpenAI's partner approval, for Weirgate and for your app. Until Weirgate records your
-app as `approved`, live features answer `funding_rail_unavailable` and only mock features
-serve the rail. OpenAI has no plan-usage sandbox before approval, so this SDK is tested
-against recorded Weirgate responses, never a real plan.
+**Status: not yet available in production.** Work on plan usage is parked. Plan usage in a
+paid or remotely hosted app needs OpenAI's partner approval, for Weirgate and for your app.
+Until Weirgate records your app as `approved`, live features answer
+`funding_rail_unavailable` (they don't fall through to another rail), so don't send a plan
+credential to live features; only mock features serve the rail. OpenAI has no plan-usage
+sandbox before approval, so this SDK is tested against recorded Weirgate responses, never a
+real plan. The rest of this section describes the API as built.
 
 ### Set up
 

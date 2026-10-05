@@ -1,6 +1,8 @@
 # Weirgate SDKs
 
-Official clients for the public Weirgate API frozen at `Weirgate-Api-Version: 2026-07-18`.
+Official clients for the public Weirgate API, contract `Weirgate-Api-Version: 2026-07-18`
+(pre-release: it may still change before general availability; see the
+[API changelog](https://weirgate.com/reference/changelog/)).
 
 Private beta — invite only; request access: [hello@weirgate.com](mailto:hello@weirgate.com).
 
@@ -8,7 +10,7 @@ Private beta — invite only; request access: [hello@weirgate.com](mailto:hello@
 - [`WeirgateKit/`](./WeirgateKit/) — `WeirgateKit` for iOS 17+ and macOS 14+.
 
 Both packages are generated or implemented solely from
-[`weirgate/openapi.yaml`](https://github.com/weirgate/weirgate/blob/main/openapi.yaml).
+[`openapi.yaml`](https://weirgate.com/openapi.yaml).
 The spec itself is not copied into this repository. Each package records the exact source
 commit used for generation.
 
@@ -21,7 +23,11 @@ npm install @weirgate/sdk
 For Swift Package Manager, add
 `https://github.com/weirgate/weirgate-sdk.git` and select the `WeirgateKit` product (and
 `WeirgateStoreKit` to sell App Store credit packs or subscriptions). The root package manifest makes tagged
-releases directly resolvable from that URL.
+releases directly resolvable from that URL:
+
+```swift
+.package(url: "https://github.com/weirgate/weirgate-sdk.git", from: "0.5.0")
+```
 
 The clients require application-issued end-user JWTs. Provider credentials remain
 ephemeral per request and are never persisted or logged by either SDK.
@@ -48,13 +54,17 @@ StoreKit 2 consumable purchases and auto-renewable subscriptions
 `WeirgateStoreObserver`, which buys with the user's `appAccountToken`, redeems unfinished and
 updated transactions (including subscription renewals), restores current subscriptions,
 and finishes each one only when Weirgate handles it or reports it refunded. TypeScript has
-the same redeem call (`redeemAppleTransaction`) and the balance split. See the [WeirgateKit README](./WeirgateKit/README.md#app-store-credit-packs-weirgatestorekit).
+the same redeem call (`redeemAppleTransaction`) and the balance split. See the [WeirgateKit README](./WeirgateKit/README.md#app-store-credit-packs-and-subscriptions-weirgatestorekit).
 
 ## Use the user's AI plan (funding rails)
 
-Each feature's funding chain decides who pays for a request: the user's AI plan
-(`user_plan`, first provider `openai_chatgpt`), the user's own provider key (`user_key`),
-or the developer (`developer`). Swift's `PlanConnect` connects the user's ChatGPT plan with
+**`user_plan` is not yet available in production** (the work is parked): live features
+answer `funding_rail_unavailable` until Weirgate approves your app, and only mock features
+serve it.
+
+Each feature's funding chain decides who pays for a request: the developer (`developer`),
+the user's own OpenRouter key (`user_key`), or, once available, the user's AI plan
+(`user_plan`, first provider `openai_chatgpt`). Swift's `PlanConnect` is built to connect the user's ChatGPT plan with
 Sign in with ChatGPT (PKCE, Keychain, rotating refresh); both clients send the plan token
 per request only to features that accept it, report who paid, apply the funding retry
 rules, and type the three funding errors and the mid-stream error frame. Web apps implement
