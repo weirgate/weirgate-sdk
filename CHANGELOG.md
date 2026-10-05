@@ -2,7 +2,11 @@
 
 All notable public SDK changes are recorded here.
 
-## Unreleased
+## @weirgate/sdk 0.6.0 — 2026-10-05
+
+TypeScript only; WeirgateKit stays 0.5.0 (README fixes only, no code change). Spec
+provenance moves to weirgate `cfff470`. Minor bump: management response types renamed
+their fields (no call signatures changed).
 
 - TypeScript: regenerated schema types for weirgate#153 (pre-release change). Management
   responses now use snake_case keys and ISO-8601 timestamps: the user read (`user`,
@@ -12,6 +16,10 @@ All notable public SDK changes are recorded here.
   `grant.created_at` (ISO string) and `user.externalId` is `user.external_id`. The full
   list is in the weirgate API changelog. No call signatures changed. The request-plane
   types (balance, chat, purchases, welcome, account) and WeirgateKit are unchanged.
+- READMEs (weirgate-sdk#28): `user_plan` / `PlanConnect` marked not yet available in
+  production, pre-release contract wording, neutral feature IDs, a note that welcome
+  credits have no TypeScript call yet, and corrected samples. The npm package README is
+  the TypeScript one.
 
 ## @weirgate/sdk 0.5.0 and WeirgateKit 0.5.0 — 2026-10-04
 
