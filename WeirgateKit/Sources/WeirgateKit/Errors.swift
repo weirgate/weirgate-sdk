@@ -1,5 +1,8 @@
 import Foundation
 
+/// The server's error type. The API documents it as open-ended: a type newer than this SDK
+/// decodes as ``unrecognized`` (handle it by ``WeirgateError/statusCode``), and
+/// ``WeirgateError/rawType`` keeps the server's value.
 public enum WeirgateErrorType: String, Codable, CaseIterable, Sendable {
     case invalidRequest = "invalid_request"
     case invalidToken = "invalid_token"
@@ -30,6 +33,17 @@ public enum WeirgateErrorType: String, Codable, CaseIterable, Sendable {
     case fundingRailUnavailable = "funding_rail_unavailable"
     case userCredentialExpired = "user_credential_expired"
     case internalError = "internal"
+    /// A type this SDK version doesn't know. Never sent by the server; see ``WeirgateError/rawType``.
+    case unrecognized
+
+    /// The known type for a server value, or ``unrecognized``.
+    public init(serverValue: String) {
+        self = WeirgateErrorType(rawValue: serverValue).flatMap { $0 == .unrecognized ? nil : $0 } ?? .unrecognized
+    }
+
+    public init(from decoder: Decoder) throws {
+        self.init(serverValue: try decoder.singleValueContainer().decode(String.self))
+    }
 }
 
 public protocol WeirgateCorrelatedError: Error {
@@ -38,7 +52,11 @@ public protocol WeirgateCorrelatedError: Error {
 }
 
 public struct WeirgateError: LocalizedError, WeirgateCorrelatedError, Sendable {
+    /// ``WeirgateErrorType/unrecognized`` for a type newer than this SDK.
     public let type: WeirgateErrorType
+    /// The type exactly as the server sent it (`type.rawValue` unless `type` is
+    /// ``WeirgateErrorType/unrecognized``). Log it with ``requestID`` for support.
+    public let rawType: String
     public let statusCode: Int
     public let requestID: String
     public let apiVersion: String
@@ -46,6 +64,26 @@ public struct WeirgateError: LocalizedError, WeirgateCorrelatedError, Sendable {
     public let detail: [String: JSONValue]?
     /// Seconds from the `Retry-After` header, when the server sent one.
     public internal(set) var retryAfter: TimeInterval? = nil
+
+    init(
+        type: WeirgateErrorType,
+        rawType: String? = nil,
+        statusCode: Int,
+        requestID: String,
+        apiVersion: String,
+        serverMessage: String?,
+        detail: [String: JSONValue]?,
+        retryAfter: TimeInterval? = nil
+    ) {
+        self.type = type
+        self.rawType = rawType ?? type.rawValue
+        self.statusCode = statusCode
+        self.requestID = requestID
+        self.apiVersion = apiVersion
+        self.serverMessage = serverMessage
+        self.detail = detail
+        self.retryAfter = retryAfter
+    }
 
     /// `detail.reason`, the stable sub-code some errors carry (for example
     /// `apple_identity_token_invalid` or `payments_not_configured`).
@@ -55,7 +93,7 @@ public struct WeirgateError: LocalizedError, WeirgateCorrelatedError, Sendable {
     }
 
     public var errorDescription: String? {
-        "Weirgate request failed with \(type.rawValue) (HTTP \(statusCode))."
+        "Weirgate request failed with \(rawType) (HTTP \(statusCode))."
     }
 }
 
@@ -195,7 +233,8 @@ public enum WeirgateSDKError: LocalizedError, WeirgateCorrelatedError, Sendable 
 
 struct ErrorEnvelope: Decodable {
     struct Body: Decodable {
-        let type: WeirgateErrorType
+        /// Kept as the server's string so a newer type still decodes the message and detail.
+        let type: String
         let message: String
         let requestID: String
         let detail: [String: JSONValue]?

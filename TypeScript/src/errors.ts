@@ -1,24 +1,34 @@
 import type { FundingRail, PlanProvider, PlanReconnectReason } from "./funding.js";
-import { API_VERSION, isErrorType, type ErrorEnvelope, type ErrorType, type RequestOptions } from "./types.js";
+import { API_VERSION, isErrorType, type ErrorEnvelope, type RequestOptions, type WeirgateErrorKind } from "./types.js";
 
 export class WeirgateError extends Error {
-  readonly type: ErrorType;
+  /**
+   * The error type. `ErrorType` is open-ended: a type newer than this SDK is
+   * `"unrecognized"` (handle it by `status`), with the server's value in `rawType`.
+   */
+  readonly type: WeirgateErrorKind;
+  /** The type exactly as the server sent it (equal to `type` unless that is `"unrecognized"`). */
+  readonly rawType: string;
   readonly status: number;
   readonly requestId: string;
   readonly apiVersion: string;
   readonly detail: Record<string, unknown> | null;
 
   constructor(input: {
-    type: ErrorType;
+    type: WeirgateErrorKind;
+    /** Defaults to `type`. */
+    rawType?: string;
     status: number;
     requestId: string;
     apiVersion: string;
     message?: string;
     detail?: Record<string, unknown> | null;
   }) {
-    super(input.message ?? `Weirgate request failed with ${input.type}`);
+    const rawType = input.rawType ?? input.type;
+    super(input.message ?? `Weirgate request failed with ${rawType}`);
     this.name = "WeirgateError";
     this.type = input.type;
+    this.rawType = rawType;
     this.status = input.status;
     this.requestId = input.requestId;
     this.apiVersion = input.apiVersion;
@@ -32,15 +42,17 @@ export class WeirgateError extends Error {
     } catch {
       // The stable header remains authoritative when a proxy strips the JSON body.
     }
-    const headerType = response.headers.get("x-weirgate-error-type");
-    const bodyType = envelope?.error?.type;
-    const type = isErrorType(headerType) ? headerType : isErrorType(bodyType) ? bodyType : "internal";
+    // The header is authoritative; with neither header nor body the response isn't Weirgate's own.
+    const rawType = response.headers.get("x-weirgate-error-type")
+      ?? (typeof envelope?.error?.type === "string" ? envelope.error.type : "internal");
+    const type = kindOf(rawType);
     const requestId = response.headers.get("x-weirgate-request-id")
       ?? envelope?.error?.request_id
       ?? "unavailable";
     const ErrorClass = errorClassFor(type);
     return new ErrorClass({
       type,
+      rawType,
       status: response.status,
       requestId,
       apiVersion: response.headers.get("weirgate-api-version") ?? API_VERSION,
@@ -54,7 +66,9 @@ export class WeirgateError extends Error {
 
 type WeirgateErrorInput = ConstructorParameters<typeof WeirgateError>[0];
 
-function errorClassFor(type: ErrorType): typeof WeirgateError {
+const kindOf = (rawType: string): WeirgateErrorKind => isErrorType(rawType) ? rawType : "unrecognized";
+
+function errorClassFor(type: WeirgateErrorKind): typeof WeirgateError {
   switch (type) {
     case "insufficient_balance": return InsufficientBalanceError;
     case "resource_conflict": return ResourceConflictError;
@@ -73,10 +87,12 @@ export function errorFromStreamFrame(
   frame: { type?: unknown; message?: unknown; request_id?: unknown; detail?: unknown },
   metadata: { requestId: string; apiVersion: string; status: number },
 ): WeirgateError {
-  const type = isErrorType(frame.type) ? frame.type : "internal";
+  const rawType = typeof frame.type === "string" ? frame.type : "internal";
+  const type = kindOf(rawType);
   const ErrorClass = errorClassFor(type);
   return new ErrorClass({
     type,
+    rawType,
     status: metadata.status,
     requestId: typeof frame.request_id === "string" ? frame.request_id : metadata.requestId,
     apiVersion: metadata.apiVersion,

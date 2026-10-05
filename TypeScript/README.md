@@ -43,6 +43,8 @@ the full Weirgate-first sequence after a partial failure.
 Mutations receive an automatic `X-Idempotency-Key`; pass `idempotencyKey` to override it.
 Credit writes are the exception: they require your own key (see below).
 Server failures are `WeirgateError` values keyed by `error.type`, never message text.
+The API can add error types without a version change; a type newer than this SDK is
+`"unrecognized"`, with the server's value in `error.rawType`. Handle it by `error.status`.
 Every result and error carries `requestId` and `apiVersion` correlation metadata.
 
 Server-side management clients can schedule a configured per-user tier with an admin
