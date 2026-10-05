@@ -2,6 +2,17 @@
 
 All notable public SDK changes are recorded here.
 
+## Unreleased
+
+- TypeScript: regenerated schema types for weirgate#153 (pre-release change). Management
+  responses now use snake_case keys and ISO-8601 timestamps: the user read (`user`,
+  `grants`, `adjustments`, `tier_changes`, `recent_events`), tier responses (`user`,
+  `tier_change`, `top_up_grant`), `createGrant` / `reverseGrant` (`grant`), and
+  `adjustCredits` (`adjustment`). For example `grant.createdAt` (ms) is now
+  `grant.created_at` (ISO string) and `user.externalId` is `user.external_id`. The full
+  list is in the weirgate API changelog. No call signatures changed. The request-plane
+  types (balance, chat, purchases, welcome, account) and WeirgateKit are unchanged.
+
 ## @weirgate/sdk 0.5.0 and WeirgateKit 0.5.0 — 2026-10-04
 
 App Store subscriptions (weirgate#90) and the balance split (weirgate#87), in one release
