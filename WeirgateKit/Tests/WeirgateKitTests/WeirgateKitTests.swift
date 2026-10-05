@@ -52,7 +52,7 @@ private func stubbedClient(
     configuration.protocolClasses = [StubURLProtocol.self]
     let session = URLSession(configuration: configuration)
     let client = WeirgateClient(
-        configuration: .init(baseURL: URL(string: "https://\(host)")!, appID: "wyvo"),
+        configuration: .init(baseURL: URL(string: "https://\(host)")!, appID: "example-app"),
         tokenProvider: .init { "fresh-jwt" },
         session: session
     )
@@ -135,7 +135,7 @@ func mixedCatalogDecode() throws {
           "feature_id": "coach-chat",
           "modality": "chat",
           "key_policy": "developer",
-          "display_label": "WyVo AI",
+          "display_label": "Example AI",
           "availability": {"available": true, "reason": null},
           "provider_policy": {"effective_state": "allowed"}
         },
@@ -167,7 +167,7 @@ func accountDeletionRequest() async throws {
         #expect(request.httpMethod == "DELETE")
         #expect(request.httpBody == nil)
         #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer fresh-jwt")
-        #expect(request.value(forHTTPHeaderField: "X-App-Id") == "wyvo")
+        #expect(request.value(forHTTPHeaderField: "X-App-Id") == "example-app")
         #expect(request.value(forHTTPHeaderField: "X-Admin-Key") == nil)
         #expect(request.value(forHTTPHeaderField: "X-Idempotency-Key") != nil)
         let response = HTTPURLResponse(
@@ -307,7 +307,7 @@ func welcomeStatuses() async throws {
             #expect(request.url?.path == "/v1/welcome-grant")
             #expect(request.httpMethod == "POST")
             #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer fresh-jwt")
-            #expect(request.value(forHTTPHeaderField: "X-App-Id") == "wyvo")
+            #expect(request.value(forHTTPHeaderField: "X-App-Id") == "example-app")
             #expect(bodyJSON(request) == ["apple_identity_token": "apple.jwt"])
             let grant = status == "granted" ? #","grant_id":"grant_w","units":10"# : #","units":0"#
             return jsonResponse(request, body: #"{"status":"\#(status)","idempotent":false,"units_available":10,"units_pending":0\#(grant)}"#)
@@ -420,10 +420,10 @@ func redeemSuccess() async throws {
     let (client, tearDown) = stubbedClient { request in
         #expect(request.url?.path == "/v1/purchases/apple")
         #expect(request.httpMethod == "POST")
-        #expect(request.value(forHTTPHeaderField: "X-App-Id") == "wyvo")
+        #expect(request.value(forHTTPHeaderField: "X-App-Id") == "example-app")
         #expect(bodyJSON(request) == ["signed_transaction": "header.payload.signature"])
         return jsonResponse(request, body: #"""
-        {"status":"granted","units":100,"grant_id":"grant_p","transaction_id":"2000000123","product_id":"com.tmatow4.wyvo.credits.small","environment":"test","units_available":110,"units_pending":0}
+        {"status":"granted","units":100,"grant_id":"grant_p","transaction_id":"2000000123","product_id":"com.example.app.credits.small","environment":"test","units_available":110,"units_pending":0}
         """#)
     }
     defer { tearDown() }
@@ -433,7 +433,7 @@ func redeemSuccess() async throws {
         units: 100,
         grantID: "grant_p",
         transactionID: "2000000123",
-        productID: "com.tmatow4.wyvo.credits.small",
+        productID: "com.example.app.credits.small",
         environment: .test,
         unitsAvailable: 110,
         unitsPending: 0

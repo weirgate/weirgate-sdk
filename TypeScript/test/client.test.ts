@@ -29,7 +29,7 @@ describe("Weirgate", () => {
     const fetcher = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(jsonResponse({ id: "one", object: "chat.completion", choices: [] }))
       .mockResolvedValueOnce(jsonResponse({ id: "two", object: "chat.completion", choices: [] }));
-    const client = new Weirgate({ appId: "wyvo", token: "jwt", fetch: fetcher });
+    const client = new Weirgate({ appId: "example-app", token: "jwt", fetch: fetcher });
 
     await client.chat("coach-chat", { messages: [{ role: "user", content: "hi" }] });
     await client.chat(
@@ -42,7 +42,7 @@ describe("Weirgate", () => {
     const secondHeaders = new Headers(fetcher.mock.calls[1]?.[1]?.headers);
     expect(firstHeaders.get("x-idempotency-key")).toBeTruthy();
     expect(secondHeaders.get("x-idempotency-key")).toBe("caller-key");
-    expect(firstHeaders.get("x-app-id")).toBe("wyvo");
+    expect(firstHeaders.get("x-app-id")).toBe("example-app");
     expect(firstHeaders.get("x-feature-id")).toBe("coach-chat");
   });
 
@@ -53,7 +53,7 @@ describe("Weirgate", () => {
       status: 402,
       headers: { "X-Weirgate-Error-Type": "out_of_allowance" },
     }));
-    const client = new Weirgate({ appId: "wyvo", token: "jwt", fetch: fetcher });
+    const client = new Weirgate({ appId: "example-app", token: "jwt", fetch: fetcher });
 
     const error = await client.balance().catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(WeirgateError);
@@ -73,7 +73,7 @@ describe("Weirgate", () => {
       user_id: "internal-user",
       anonymized_at: "2026-08-16T18:00:00.000Z",
     }));
-    const client = new Weirgate({ appId: "wyvo", token: "fresh-jwt", fetch: fetcher });
+    const client = new Weirgate({ appId: "example-app", token: "fresh-jwt", fetch: fetcher });
 
     const result = await client.deleteAccount();
 
@@ -83,7 +83,7 @@ describe("Weirgate", () => {
     expect(fetcher.mock.calls[0]?.[1]?.body).toBeUndefined();
     const headers = new Headers(fetcher.mock.calls[0]?.[1]?.headers);
     expect(headers.get("authorization")).toBe("Bearer fresh-jwt");
-    expect(headers.get("x-app-id")).toBe("wyvo");
+    expect(headers.get("x-app-id")).toBe("example-app");
     expect(headers.get("x-admin-key")).toBeNull();
     expect(headers.get("x-idempotency-key")).toBeTruthy();
   });
@@ -96,7 +96,7 @@ describe("Weirgate", () => {
           feature_id: "coach-chat",
           modality: "chat",
           key_policy: "developer",
-          display_label: "WyVo AI",
+          display_label: "Example AI",
           availability: { available: true, reason: null },
           provider_policy: { effective_state: "allowed" },
         },
@@ -118,7 +118,7 @@ describe("Weirgate", () => {
         status: 304,
         headers: { ...responseHeaders, ETag: '"catalog-1"' },
       }));
-    const client = new Weirgate({ appId: "wyvo", token: "jwt", fetch: fetcher });
+    const client = new Weirgate({ appId: "example-app", token: "jwt", fetch: fetcher });
 
     const first = await client.features();
     expect(first.kind).toBe("modified");
@@ -140,7 +140,7 @@ describe("Weirgate", () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(sse, {
       headers: { ...responseHeaders, "Content-Type": "text/event-stream", "X-Credits-Remaining": "9" },
     }));
-    const client = new Weirgate({ appId: "wyvo", token: "jwt", fetch: fetcher });
+    const client = new Weirgate({ appId: "example-app", token: "jwt", fetch: fetcher });
 
     const stream = await client.streamChat("coach-chat", { messages: [{ role: "user", content: "hello" }] });
     const chunks = [];
@@ -154,7 +154,7 @@ describe("Weirgate", () => {
       'data: {"id":"c1","object":"chat.completion.chunk","choices":[{"delta":{"content":"partial"}}]}\n\n',
       { headers: { ...responseHeaders, "Content-Type": "text/event-stream" } },
     ));
-    const client = new Weirgate({ appId: "wyvo", token: "jwt", fetch: fetcher });
+    const client = new Weirgate({ appId: "example-app", token: "jwt", fetch: fetcher });
     const stream = await client.streamChat("coach-chat", { messages: [{ role: "user", content: "hello" }] });
 
     const consume = async () => {
@@ -170,7 +170,7 @@ describe("Weirgate", () => {
       'data: {"id":"c1","object":"chat.completion.chunk"}\n\n',
       { headers: { ...responseHeaders, "Content-Type": "text/event-stream" } },
     ));
-    const client = new Weirgate({ appId: "wyvo", token: "jwt", fetch: fetcher });
+    const client = new Weirgate({ appId: "example-app", token: "jwt", fetch: fetcher });
     const stream = await client.streamChat("coach-chat", { messages: [{ role: "user", content: "hello" }] });
 
     const consume = async () => {
@@ -191,7 +191,7 @@ describe("Weirgate", () => {
     }));
     const client = new Weirgate({ adminKey: "wgk_test", fetch: fetcher });
 
-    const error = await client.completeUsage("wyvo").catch((caught: unknown) => caught);
+    const error = await client.completeUsage("example-app").catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(UsageTruncatedError);
     expect(error).toMatchObject({ limit: 500, returned: 500, requestId: "req_12345678" });
   });
@@ -206,12 +206,12 @@ describe("Weirgate", () => {
       .mockResolvedValueOnce(jsonResponse(tierResult));
     const client = new Weirgate({ adminKey: "wgk_test", fetch: fetcher });
 
-    await client.assignUserTier("wyvo", "person/one", {
+    await client.assignUserTier("example-app", "person/one", {
       tier: "early-adopter", top_up_now: true,
     }, { idempotencyKey: "tier-assign-1" });
-    await client.revertUserTier("wyvo", "person/one", {}, { idempotencyKey: "tier-revert-1" });
+    await client.revertUserTier("example-app", "person/one", {}, { idempotencyKey: "tier-revert-1" });
 
-    expect(fetcher.mock.calls[0]?.[0]).toBe("https://api.weirgate.com/v1/admin/apps/wyvo/users/person%2Fone/tier");
+    expect(fetcher.mock.calls[0]?.[0]).toBe("https://api.weirgate.com/v1/admin/apps/example-app/users/person%2Fone/tier");
     expect(fetcher.mock.calls[0]?.[1]).toMatchObject({
       method: "PUT",
       body: JSON.stringify({ tier: "early-adopter", top_up_now: true }),
@@ -226,10 +226,10 @@ describe("Weirgate", () => {
     const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => jsonResponse({}));
     const client = new Weirgate({ adminKey: "wgk_test", fetch: fetcher });
 
-    await client.assignUserTier("wyvo", "u1", {
+    await client.assignUserTier("example-app", "u1", {
       tier: "early_adopter", expires_at: new Date("2027-03-31T23:59:59Z"),
     }, { idempotencyKey: "ea-u1" });
-    await client.assignUserTier("wyvo", "u1", { tier: "pro" }, { idempotencyKey: "pro-u1" });
+    await client.assignUserTier("example-app", "u1", { tier: "pro" }, { idempotencyKey: "pro-u1" });
 
     expect(fetcher.mock.calls[0]?.[1]?.body).toBe(
       JSON.stringify({ tier: "early_adopter", expires_at: "2027-03-31T23:59:59.000Z" }),
@@ -245,20 +245,20 @@ describe("credits API", () => {
     const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => jsonResponse({}));
     const client = new Weirgate({ adminKey: "wgk_credits", fetch: fetcher });
 
-    await client.createGrant("wyvo", "person/one", { units: 100, source: "stripe:cs_1" }, {
+    await client.createGrant("example-app", "person/one", { units: 100, source: "stripe:cs_1" }, {
       idempotencyKey: "stripe:cs_1",
     });
-    await client.reverseGrant("wyvo", "grant/1", { idempotencyKey: "stripe:re_1" });
-    await client.adjustCredits("wyvo", "person/one", {
+    await client.reverseGrant("example-app", "grant/1", { idempotencyKey: "stripe:re_1" });
+    await client.adjustCredits("example-app", "person/one", {
       units: -40, reason: "clawback", source: "stripe:re_2",
     }, { idempotencyKey: "stripe:re_2" });
 
     const [grant, reverse, adjust] = fetcher.mock.calls;
-    expect(grant?.[0]).toBe("https://api.weirgate.com/v1/admin/apps/wyvo/users/person%2Fone/grants");
+    expect(grant?.[0]).toBe("https://api.weirgate.com/v1/admin/apps/example-app/users/person%2Fone/grants");
     expect(grant?.[1]).toMatchObject({ method: "POST", body: JSON.stringify({ units: 100, source: "stripe:cs_1" }) });
-    expect(reverse?.[0]).toBe("https://api.weirgate.com/v1/admin/apps/wyvo/grants/grant%2F1/reverse");
+    expect(reverse?.[0]).toBe("https://api.weirgate.com/v1/admin/apps/example-app/grants/grant%2F1/reverse");
     expect(reverse?.[1]?.body).toBeUndefined();
-    expect(adjust?.[0]).toBe("https://api.weirgate.com/v1/admin/apps/wyvo/users/person%2Fone/adjustments");
+    expect(adjust?.[0]).toBe("https://api.weirgate.com/v1/admin/apps/example-app/users/person%2Fone/adjustments");
     expect(adjust?.[1]?.body).toBe(JSON.stringify({ units: -40, reason: "clawback", source: "stripe:re_2" }));
     const keys = fetcher.mock.calls.map((call) => new Headers(call[1]?.headers));
     expect(keys.map((headers) => headers.get("x-idempotency-key"))).toEqual(["stripe:cs_1", "stripe:re_1", "stripe:re_2"]);
@@ -279,10 +279,10 @@ describe("credits API", () => {
     };
 
     const attempts = [
-      untyped.createGrant("wyvo", "u1", { units: 1 }, {}),
-      untyped.createGrant("wyvo", "u1", { units: 1 }, { idempotencyKey: "  " }),
-      untyped.reverseGrant("wyvo", "g1", undefined),
-      untyped.adjustCredits("wyvo", "u1", { units: 1, reason: "manual" }, { idempotencyKey: "" }),
+      untyped.createGrant("example-app", "u1", { units: 1 }, {}),
+      untyped.createGrant("example-app", "u1", { units: 1 }, { idempotencyKey: "  " }),
+      untyped.reverseGrant("example-app", "g1", undefined),
+      untyped.adjustCredits("example-app", "u1", { units: 1, reason: "manual" }, { idempotencyKey: "" }),
     ];
     for (const attempt of attempts) await expect(attempt).rejects.toThrow(/idempotencyKey is required/);
     expect(fetcher).not.toHaveBeenCalled();
@@ -296,9 +296,9 @@ describe("credits API", () => {
     }));
     const client = new Weirgate({ adminKey: "wgk_credits", fetch: fetcher });
 
-    const result = await client.getUserCredits("wyvo", "person/one");
+    const result = await client.getUserCredits("example-app", "person/one");
 
-    expect(fetcher.mock.calls[0]?.[0]).toBe("https://api.weirgate.com/v1/admin/apps/wyvo/users/person%2Fone");
+    expect(fetcher.mock.calls[0]?.[0]).toBe("https://api.weirgate.com/v1/admin/apps/example-app/users/person%2Fone");
     expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ method: "GET" });
     expect(new Headers(fetcher.mock.calls[0]?.[1]?.headers).get("x-idempotency-key")).toBeNull();
     expect(result.data.balance).toMatchObject({ unlimited: true, unlimited_until: "2027-03-31T23:59:59.000Z" });
@@ -315,7 +315,7 @@ describe("credits API", () => {
     }, { status: 402, headers: { "X-Weirgate-Error-Type": "insufficient_balance" } }));
     const client = new Weirgate({ adminKey: "wgk_credits", fetch: fetcher });
 
-    const error = await client.adjustCredits("wyvo", "u1", { units: -40, reason: "manual" }, {
+    const error = await client.adjustCredits("example-app", "u1", { units: -40, reason: "manual" }, {
       idempotencyKey: "manual-1",
     }).catch((caught: unknown) => caught);
 
@@ -330,7 +330,7 @@ describe("credits API", () => {
     }, { status: 409, headers: { "X-Weirgate-Error-Type": "resource_conflict" } }));
     const client = new Weirgate({ adminKey: "wgk_credits", fetch: fetcher });
 
-    const error = await client.createGrant("wyvo", "u1", { units: 300 }, { idempotencyKey: "stripe:cs_1" })
+    const error = await client.createGrant("example-app", "u1", { units: 300 }, { idempotencyKey: "stripe:cs_1" })
       .catch((caught: unknown) => caught);
 
     expect(error).toBeInstanceOf(ResourceConflictError);
