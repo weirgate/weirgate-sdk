@@ -4,8 +4,6 @@ Official clients for the public Weirgate API, contract `Weirgate-Api-Version: 20
 (pre-release: it may still change before general availability; see the
 [API changelog](https://weirgate.com/reference/changelog/)).
 
-Private beta — invite only; request access: [hello@weirgate.com](mailto:hello@weirgate.com).
-
 - [`TypeScript/`](./TypeScript/) — `@weirgate/sdk` for TypeScript and JavaScript.
 - [`WeirgateKit/`](./WeirgateKit/) — `WeirgateKit` for iOS 17+ and macOS 14+.
 
