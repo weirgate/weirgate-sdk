@@ -165,7 +165,11 @@ export interface UsageQuery {
   since?: string | Date | undefined;
   until?: string | Date | undefined;
   limit?: number | undefined;
-  groupBy?: "feature" | "user" | undefined;
+  /**
+   * Default `feature`. `refusal_code` groups refused requests by error type; its groups
+   * carry only `requests` (other sums are 0, latency null).
+   */
+  groupBy?: "feature" | "user" | "model" | "funding_rail" | "refusal_code" | undefined;
   signal?: AbortSignal | undefined;
 }
 

@@ -50,9 +50,11 @@ regenerated types (TypeScript). No existing call signatures changed.
   (`fixtures/webhooks/`). `WebhookEventType` / `WEBHOOK_EVENT_TYPES` include
   `provider.credit_low`, `provider.credit_exhausted`, `provider.credit_restored`,
   `user_key.rejected`, `platform.allowance_warning`, and `platform.allowance_exhausted`.
+- `usage()` `groupBy` accepts every value the spec allows: `model`, `funding_rail`, and
+  `refusal_code` join `feature` and `user`.
 - Regenerated types from weirgate `951691c`. Besides the above: usage rollups add
   `active_users`, `p50_ms`, `p95_ms`, and the page adds `totals`, `refusals_since`, and
-  optional `series` / `margin` (the `usage()` query options are unchanged);
+  optional `series` / `margin`;
   `UserTierAssignmentInput.expires_at` documents its open-ended default.
 
 ## @weirgate/sdk 0.7.0 and WeirgateKit 0.6.0 — 2026-10-05

@@ -183,3 +183,17 @@ describe("user status and the users listing", () => {
     expect(page.data.pagination).toMatchObject({ total: 10_000, total_capped: true, next_cursor: "cur_2" });
   });
 });
+
+describe("usage grouping", () => {
+  it("sends every group_by value the spec allows", async () => {
+    const groupBys = ["feature", "user", "model", "funding_rail", "refusal_code"] as const;
+    type SpecGroupBy = NonNullable<NonNullable<import("../src/generated/schema.js").operations["getUsage"]["parameters"]["query"]>["group_by"]>;
+    type Missing = Exclude<SpecGroupBy, (typeof groupBys)[number]>;
+    const complete: [Missing] extends [never] ? true : false = true;
+    expect(complete).toBe(true);
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => jsonResponse({}));
+    const client = new Weirgate({ adminKey: "wgk_usage", fetch: fetcher });
+    for (const groupBy of groupBys) await client.usage("example-app", { groupBy });
+    expect(fetcher.mock.calls.map(([url]) => new URL(String(url)).searchParams.get("group_by"))).toEqual([...groupBys]);
+  });
+});
