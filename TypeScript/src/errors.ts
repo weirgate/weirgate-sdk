@@ -1,5 +1,12 @@
 import type { FundingRail, PlanProvider, PlanReconnectReason } from "./funding.js";
-import { API_VERSION, isErrorType, type ErrorEnvelope, type RequestOptions, type WeirgateErrorKind } from "./types.js";
+import {
+  API_VERSION,
+  NO_PAYWALL_ERROR_TYPES,
+  isErrorType,
+  type ErrorEnvelope,
+  type RequestOptions,
+  type WeirgateErrorKind,
+} from "./types.js";
 
 export class WeirgateError extends Error {
   /**
@@ -13,6 +20,13 @@ export class WeirgateError extends Error {
   readonly requestId: string;
   readonly apiVersion: string;
   readonly detail: Record<string, unknown> | null;
+  /**
+   * Seconds from the `Retry-After` header (delta-seconds, or an HTTP date converted to
+   * seconds from now), or null when the server sent none. Set on `rate_limited`,
+   * `budget_exhausted`, `platform_allowance_exhausted`, `provider_rate_limited` (when the
+   * provider sent one), and `provider_unavailable` while Apple's keys are unavailable.
+   */
+  readonly retryAfter: number | null;
 
   constructor(input: {
     type: WeirgateErrorKind;
@@ -23,6 +37,7 @@ export class WeirgateError extends Error {
     apiVersion: string;
     message?: string;
     detail?: Record<string, unknown> | null;
+    retryAfter?: number | null;
   }) {
     const rawType = input.rawType ?? input.type;
     super(input.message ?? `Weirgate request failed with ${rawType}`);
@@ -33,6 +48,16 @@ export class WeirgateError extends Error {
     this.requestId = input.requestId;
     this.apiVersion = input.apiVersion;
     this.detail = input.detail ?? null;
+    this.retryAfter = input.retryAfter ?? null;
+  }
+
+  /**
+   * True for errors that are never the end user's doing (`developer_credit_exhausted`,
+   * `provider_rate_limited`, `platform_allowance_exhausted`, `budget_exhausted`): show a
+   * "temporarily unavailable" message, never a paywall or purchase prompt.
+   */
+  get mustNotShowPaywall(): boolean {
+    return (NO_PAYWALL_ERROR_TYPES as readonly string[]).includes(this.type);
   }
 
   static async fromResponse(response: Response): Promise<WeirgateError> {
@@ -53,6 +78,7 @@ export class WeirgateError extends Error {
     return new ErrorClass({
       type,
       rawType,
+      retryAfter: parseRetryAfter(response.headers.get("retry-after")),
       status: response.status,
       requestId,
       apiVersion: response.headers.get("weirgate-api-version") ?? API_VERSION,
@@ -75,6 +101,11 @@ function errorClassFor(type: WeirgateErrorKind): typeof WeirgateError {
     case "funding_rail_refused": return FundingRailRefusedError;
     case "funding_rail_unavailable": return FundingRailUnavailableError;
     case "user_credential_expired": return UserCredentialExpiredError;
+    case "user_provider_key_invalid": return UserProviderKeyInvalidError;
+    case "developer_credit_exhausted": return DeveloperCreditExhaustedError;
+    case "provider_rate_limited": return ProviderRateLimitedError;
+    case "platform_allowance_exhausted": return PlatformAllowanceExhaustedError;
+    case "budget_exhausted": return BudgetExhaustedError;
     default: return WeirgateError;
   }
 }
@@ -221,6 +252,118 @@ export class ResourceConflictError extends WeirgateError {
     const replacedBy = this.detail?.["replaced_by_key_id"];
     this.replacedByKeyId = typeof replacedBy === "string" ? replacedBy : null;
   }
+}
+
+/**
+ * `user_provider_key_invalid` (422): the end user's own provider key was rejected.
+ * `reason` is `invalid` (the provider refused the key: ask the user to fix it) or
+ * `out_of_credit` (the key's provider account is empty: ask the user to add credit there).
+ * Other reasons may be added later.
+ */
+export class UserProviderKeyInvalidError extends WeirgateError {
+  declare readonly type: "user_provider_key_invalid";
+  readonly reason: "invalid" | "out_of_credit" | (string & {}) | null;
+  readonly provider: string | null;
+  readonly rail: FundingRail | null;
+
+  constructor(input: WeirgateErrorInput) {
+    super(input);
+    this.name = "UserProviderKeyInvalidError";
+    this.reason = stringDetail(this.detail, "reason");
+    this.provider = stringDetail(this.detail, "provider");
+    this.rail = stringDetail(this.detail, "rail");
+  }
+}
+
+/**
+ * `developer_credit_exhausted` (503): the app owner's provider key is out of credit. Not
+ * the end user's doing: never show a paywall. A feature whose chain lists a user rail
+ * after `developer` already fell through to it inside the request; otherwise you may fall
+ * back (for example to the user's own key) or retry later.
+ */
+export class DeveloperCreditExhaustedError extends WeirgateError {
+  declare readonly type: "developer_credit_exhausted";
+  readonly provider: string | null;
+  readonly nextRail: FundingRail | null;
+
+  constructor(input: WeirgateErrorInput) {
+    super(input);
+    this.name = "DeveloperCreditExhaustedError";
+    this.provider = stringDetail(this.detail, "provider");
+    this.nextRail = stringDetail(this.detail, "next_rail");
+  }
+}
+
+/**
+ * `provider_rate_limited` (503): the provider throttled the request. Retry after
+ * `retryAfter` seconds when set. Never show a paywall.
+ */
+export class ProviderRateLimitedError extends WeirgateError {
+  declare readonly type: "provider_rate_limited";
+  readonly provider: string | null;
+  readonly rail: FundingRail | null;
+
+  constructor(input: WeirgateErrorInput) {
+    super(input);
+    this.name = "ProviderRateLimitedError";
+    this.provider = stringDetail(this.detail, "provider");
+    this.rail = stringDetail(this.detail, "rail");
+  }
+}
+
+/**
+ * `platform_allowance_exhausted` (429): the app's Weirgate plan used its included calls or
+ * tokens for the UTC month. Never the end user's fault: show "temporarily unavailable",
+ * never a paywall. `retryAfter` is the seconds until the month resets.
+ */
+export class PlatformAllowanceExhaustedError extends WeirgateError {
+  declare readonly type: "platform_allowance_exhausted";
+  /** `calls` or `tokens`. */
+  readonly meter: string | null;
+  readonly tier: string | null;
+  /** ISO-8601 instant of the reset. */
+  readonly resetsAt: string | null;
+
+  constructor(input: WeirgateErrorInput) {
+    super(input);
+    this.name = "PlatformAllowanceExhaustedError";
+    this.meter = stringDetail(this.detail, "meter");
+    this.tier = stringDetail(this.detail, "tier");
+    this.resetsAt = stringDetail(this.detail, "resets_at");
+  }
+}
+
+/**
+ * `budget_exhausted` (429): the app's developer-funded spend reached its monthly or daily
+ * budget. Only on the developer rail; not the end user's doing, so never show a paywall.
+ * `retryAfter` is the seconds until the budget period resets.
+ */
+export class BudgetExhaustedError extends WeirgateError {
+  declare readonly type: "budget_exhausted";
+  /** `month` or `day`. */
+  readonly period: string | null;
+  /** ISO-8601 instant of the reset. */
+  readonly resetsAt: string | null;
+
+  constructor(input: WeirgateErrorInput) {
+    super(input);
+    this.name = "BudgetExhaustedError";
+    this.period = stringDetail(this.detail, "period");
+    this.resetsAt = stringDetail(this.detail, "resets_at");
+  }
+}
+
+/**
+ * `Retry-After` as seconds: delta-seconds, or an HTTP date as seconds from `now` (0 when
+ * it has passed). Null when absent or unparseable.
+ */
+export function parseRetryAfter(value: string | null | undefined, now: number = Date.now()): number | null {
+  if (value == null) return null;
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) return Number(trimmed);
+  const at = Date.parse(trimmed);
+  if (!/[a-z]/i.test(trimmed) || Number.isNaN(at)) return null;
+  return Math.max(0, Math.ceil((at - now) / 1000));
 }
 
 function stringDetail(detail: Record<string, unknown> | null, key: string): string | null {

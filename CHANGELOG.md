@@ -2,6 +2,61 @@
 
 All notable public SDK changes are recorded here.
 
+## @weirgate/sdk 0.8.0 and WeirgateKit 0.7.0 — 2026-10-18
+
+Catch-up with the server contract of 2026-10-18 (weirgate#245, #246, #247; weirgate-sdk#36).
+Spec provenance moves to weirgate `951691c` (both SDKs). Minor bumps: new error-type
+cases (Swift, source-breaking for exhaustive switches), new classes, methods, and
+regenerated types (TypeScript). No existing call signatures changed.
+
+### Both SDKs
+
+- New error types, previously `unrecognized`: `developer_credit_exhausted` (503),
+  `provider_rate_limited` (503), `platform_allowance_exhausted` (429), and
+  `budget_exhausted` (429). None of them is the end user's doing: the new
+  `mustNotShowPaywall` is true for all four, and the doc comments say to show a
+  "temporarily unavailable" message, never a paywall.
+- `Retry-After` as a typed value in seconds (delta-seconds or an HTTP date) on every
+  `WeirgateError`.
+- `user_provider_key_invalid` exposes `detail.reason`: `invalid` or `out_of_credit`.
+
+### Swift (WeirgateKit 0.7.0)
+
+- **Source-breaking:** `WeirgateErrorType` gains `.developerCreditExhausted`,
+  `.providerRateLimited`, `.platformAllowanceExhausted`, and `.budgetExhausted`.
+- `WeirgateErrorType.mustNotShowPaywall` and `WeirgateError.mustNotShowPaywall`.
+- `WeirgateError.userProviderKeyInvalidReason` (`UserProviderKeyInvalidReason`:
+  `.invalid`, `.outOfCredit`, `.unrecognized(String)`).
+- `WeirgateError.retryAfter` (already present) now documents the types that carry it.
+
+### TypeScript (@weirgate/sdk 0.8.0)
+
+- `ERROR_TYPES` gains the four types; `NO_PAYWALL_ERROR_TYPES` lists the never-paywall
+  ones. New classes `DeveloperCreditExhaustedError` (`provider`, `nextRail`),
+  `ProviderRateLimitedError` (`provider`, `rail`), `PlatformAllowanceExhaustedError`
+  (`meter`, `tier`, `resetsAt`), `BudgetExhaustedError` (`period`, `resetsAt`), and
+  `UserProviderKeyInvalidError` (`reason`, `provider`, `rail`). Each extends
+  `WeirgateError`, so existing `error.type` checks keep working.
+- `WeirgateError.retryAfter` (seconds or null), `WeirgateError.mustNotShowPaywall`, and
+  the exported `parseRetryAfter`.
+- `getUserStatus(appId, externalId)`: `GET /v1/admin/apps/{app_id}/users/{external_id}/status`,
+  typed `UserStatus`. The user read (`getUserCredits`) now has the same object as `status`.
+- `listUsers(appId, query)`: `GET /v1/admin/apps/{app_id}/users` (JSON) with filters,
+  sort, and cursor; `pagination.total` is capped at 10,000 and `pagination.total_capped`
+  says when more match.
+- Webhooks: `verifyWebhookSignature` and `constructWebhookEvent` check
+  `Weirgate-Signature: v1=` (HMAC-SHA256 over `<timestamp>.<raw body>`, constant-time,
+  300-second default tolerance), tested against a vector signed by the server's own code
+  (`fixtures/webhooks/`). `WebhookEventType` / `WEBHOOK_EVENT_TYPES` include
+  `provider.credit_low`, `provider.credit_exhausted`, `provider.credit_restored`,
+  `user_key.rejected`, `platform.allowance_warning`, and `platform.allowance_exhausted`.
+- `usage()` `groupBy` accepts every value the spec allows: `model`, `funding_rail`, and
+  `refusal_code` join `feature` and `user`.
+- Regenerated types from weirgate `951691c`. Besides the above: usage rollups add
+  `active_users`, `p50_ms`, `p95_ms`, and the page adds `totals`, `refusals_since`, and
+  optional `series` / `margin`;
+  `UserTierAssignmentInput.expires_at` documents its open-ended default.
+
 ## @weirgate/sdk 0.7.0 and WeirgateKit 0.6.0 — 2026-10-05
 
 The API contract cleanup before GA (weirgate#174, #177, #180, #181, #182). Spec provenance

@@ -321,7 +321,22 @@ access tokens are sent per request and stored only by `PlanConnect`'s token stor
 Typed HTTP failures use `WeirgateError.type`; consumers never inspect message strings.
 The API can add error types without a version change: a type newer than the SDK is
 `.unrecognized`, with the server's value in `WeirgateError.rawType`. Handle it by
-`statusCode`, and give `switch error.type` a `default:` case.
+`statusCode`, and give `switch error.type` a `default:` case. `WeirgateError.retryAfter`
+is the `Retry-After` header in seconds, when sent.
+
+Some refusals are never the end user's doing; for these `error.mustNotShowPaywall` is
+true. Show a "temporarily unavailable" message, never a purchase prompt:
+
+| `error.type` (status) | Meaning |
+|---|---|
+| `.developerCreditExhausted` (503) | The app's provider key is out of credit. A chain with a user rail after `developer` already fell through; otherwise fall back or retry later |
+| `.providerRateLimited` (503) | The provider throttled the request; retry after `retryAfter` when set |
+| `.platformAllowanceExhausted` (429) | The app's Weirgate plan used its monthly calls or tokens; `retryAfter` is the seconds until the reset |
+| `.budgetExhausted` (429) | The app's developer-funded budget for the month or day is spent; `retryAfter` is the seconds until the reset |
+
+For `.userProviderKeyInvalid` (422), `error.userProviderKeyInvalidReason` is `.invalid`
+(the provider refused the user's key; ask them to fix it) or `.outOfCredit` (their
+provider account is empty; ask them to add credit there).
 
 See the [SDK guide](https://weirgate.com/guides/sdks/) and
 [API reference](https://weirgate.com/reference/api/) for the public contract.

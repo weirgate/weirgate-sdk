@@ -46,6 +46,22 @@ Server failures are `WeirgateError` values keyed by `error.type`, never message 
 The API can add error types without a version change; a type newer than this SDK is
 `"unrecognized"`, with the server's value in `error.rawType`. Handle it by `error.status`.
 Every result and error carries `requestId` and `apiVersion` correlation metadata.
+`error.retryAfter` is the `Retry-After` header in seconds (an HTTP date is converted), or
+null.
+
+Some refusals are never the end user's doing. For these `error.mustNotShowPaywall` is
+true: show a "temporarily unavailable" message, never a purchase prompt.
+
+| `error.type` (status) | Class | Meaning |
+|---|---|---|
+| `developer_credit_exhausted` (503) | `DeveloperCreditExhaustedError` (`provider`, `nextRail`) | Your provider key is out of credit. A chain with a user rail after `developer` already fell through; otherwise fall back or retry later |
+| `provider_rate_limited` (503) | `ProviderRateLimitedError` (`provider`, `rail`) | The provider throttled the request; retry after `retryAfter` when set |
+| `platform_allowance_exhausted` (429) | `PlatformAllowanceExhaustedError` (`meter`, `tier`, `resetsAt`) | Your Weirgate plan used its monthly calls or tokens; `retryAfter` is the seconds until the reset |
+| `budget_exhausted` (429) | `BudgetExhaustedError` (`period`, `resetsAt`) | Your developer-funded budget for the month or day is spent; `retryAfter` is the seconds until the reset |
+
+`user_provider_key_invalid` (422) is `UserProviderKeyInvalidError`: `reason` is
+`"invalid"` (the provider refused the user's key; ask them to fix it) or
+`"out_of_credit"` (their provider account is empty; ask them to add credit there).
 
 Server-side management clients can schedule a configured per-user tier with an admin
 key that has apply scope and the `plans` tool group (a credits-only key can't change
@@ -212,7 +228,8 @@ It may omit `expires_at`, and can call only these methods:
 | `createGrant(appId, externalId, { units, source }, { idempotencyKey })` | Credits added by a purchase |
 | `reverseGrant(appId, grantId, { idempotencyKey })` | Cancelling a whole grant, e.g. a full refund |
 | `adjustCredits(appId, externalId, { units, reason, source, allow_negative }, { idempotencyKey })` | Signed corrections: deductions, partial clawbacks, goodwill |
-| `getUserCredits(appId, externalId)` | Balance (with `allowance_available` / `purchased_available`), unlimited state, grants, adjustments, tier changes, plan source (`tier_source`: `subscription` or `manual`), App Store `subscriptions`, and recent usage |
+| `getUserCredits(appId, externalId)` | Balance (with `allowance_available` / `purchased_available`), unlimited state, block `status`, grants, adjustments, tier changes, plan source (`tier_source`: `subscription` or `manual`), App Store `subscriptions`, and recent usage |
+| `getUserStatus(appId, externalId)` | Only the block status: `state` (`ok` or `blocked`) and `reasons` (active conditions first, then the user's refusals of the last 24 hours) |
 
 Writes create the user when the external ID is unknown. Every write requires
 `idempotencyKey`, and the SDK never generates one: derive it from your payment
@@ -319,6 +336,47 @@ is lost, the new value is gone; rotate the replacement (`replacedByKeyId`) again
 
 See the [SDK guide](https://weirgate.com/guides/sdks/) and
 [API reference](https://weirgate.com/reference/api/) for the public contract.
+
+## Listing users
+
+`listUsers(appId, query)` (a key with the `usage` tool group) returns one page of active
+users with filters (`q`, `tier`, `balanceLt`, `outOfAllowance`, `activeSince`,
+`inactiveSince`, `paying`), `sort`, `direction`, and `cursor`. `pagination.total` counts
+every match up to 10,000; when `pagination.total_capped` is true more match, so show the
+count as "10,000+". Pass `pagination.next_cursor` as `cursor`, with the same sort and
+direction, for the next page.
+
+## Verifying webhooks
+
+Verify every delivery over the exact raw body before parsing it:
+
+```ts
+import { constructWebhookEvent, WebhookSignatureError } from "@weirgate/sdk";
+
+app.post("/weirgate/webhooks", express.raw({ type: "application/json" }), async (req, res) => {
+  try {
+    const event = await constructWebhookEvent({
+      payload: req.body, // Buffer or string: the raw body
+      headers: req.headers,
+      secret: process.env.WEIRGATE_WEBHOOK_SECRET!, // the endpoint's whsec_ secret
+    });
+    if (event.type === "provider.credit_exhausted") switchToUserFunded(event.data);
+    res.sendStatus(204);
+  } catch (error) {
+    if (error instanceof WebhookSignatureError) return res.sendStatus(400);
+    throw error;
+  }
+});
+```
+
+`verifyWebhookSignature` checks `Weirgate-Signature: v1=<hex>`, the HMAC-SHA256 of
+`<Weirgate-Timestamp>.<raw body>` under the secret, in constant time, and rejects a
+timestamp more than `toleranceSeconds` (default 300) from now. It needs Web Crypto
+(`globalThis.crypto.subtle`: Node 19+, Deno, Bun, Workers, browsers). Delivery is at least once,
+so deduplicate by `event.id`. Event types are open-ended: `WEBHOOK_EVENT_TYPES` lists the
+ones this SDK knows (including `provider.credit_low`, `provider.credit_exhausted`,
+`provider.credit_restored`, `user_key.rejected`, `platform.allowance_warning`, and
+`platform.allowance_exhausted`); ignore the rest.
 
 ## Regeneration
 

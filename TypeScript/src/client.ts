@@ -20,6 +20,7 @@ import {
   type GrantResult,
   type GrantReversalResult,
   type Health,
+  type ListUsersQuery,
   type ManagementKeyRotateInput,
   type RequestOptions,
   type ResponseMetadata,
@@ -28,6 +29,8 @@ import {
   type UsageQuery,
   type UsageRollupPage,
   type UserCredits,
+  type UserListPage,
+  type UserStatus,
   type UserTierAssignmentInput,
   type UserTierChangeResult,
   type UserTierRevertInput,
@@ -340,7 +343,54 @@ export class Weirgate {
     );
   }
 
-  /** Balance, unlimited state, grants, adjustments, tier changes, and recent usage. */
+  /**
+   * Why a user is blocked now (`state: "blocked"` with active `reasons`), plus their
+   * refusals of the last 24 hours. The same object is `getUserCredits().data.status`.
+   * Needs the usage or credits tool group; never creates the user.
+   */
+  getUserStatus(
+    appId: string,
+    externalId: string,
+    signal?: AbortSignal,
+  ): Promise<WeirgateResult<UserStatus>> {
+    return this.requestJson(
+      "GET",
+      `/v1/admin/apps/${encodeURIComponent(appId)}/users/${encodeURIComponent(externalId)}/status`,
+      undefined,
+      { admin: true, signal },
+    );
+  }
+
+  /**
+   * One page of the app's active users (JSON). Filters combine with AND.
+   * `data.pagination.total` counts every match up to 10,000; when
+   * `data.pagination.total_capped` is true more match, so show "10,000+". Pass
+   * `pagination.next_cursor` as `cursor` with the same sort and direction for the next page.
+   * Needs the usage tool group.
+   */
+  listUsers(appId: string, query: ListUsersQuery = {}): Promise<WeirgateResult<UserListPage>> {
+    const parameters = new URLSearchParams();
+    if (query.cursor) parameters.set("cursor", query.cursor);
+    if (query.limit !== undefined) parameters.set("limit", String(query.limit));
+    if (query.q) parameters.set("q", query.q);
+    if (query.tier) parameters.set("tier", query.tier);
+    if (query.balanceLt !== undefined) parameters.set("balance_lt", String(query.balanceLt));
+    if (query.outOfAllowance) parameters.set("out_of_allowance", "true");
+    if (query.activeSince) parameters.set("active_since", dateParameter(query.activeSince));
+    if (query.inactiveSince) parameters.set("inactive_since", dateParameter(query.inactiveSince));
+    if (query.paying !== undefined) parameters.set("paying", String(query.paying));
+    if (query.sort) parameters.set("sort", query.sort);
+    if (query.direction) parameters.set("direction", query.direction);
+    const suffix = parameters.size ? `?${parameters}` : "";
+    return this.requestJson(
+      "GET",
+      `/v1/admin/apps/${encodeURIComponent(appId)}/users${suffix}`,
+      undefined,
+      { admin: true, signal: query.signal },
+    );
+  }
+
+  /** Balance, unlimited state, block status, grants, adjustments, tier changes, and recent usage. */
   getUserCredits(
     appId: string,
     externalId: string,

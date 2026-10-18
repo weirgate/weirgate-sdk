@@ -81,7 +81,8 @@ against a real plan: tests replay Weirgate responses recorded from the server
 
 Developer servers that sell credits through their own payment system (Stripe,
 RevenueCat, or a custom backend) use `createGrant`, `reverseGrant`, `adjustCredits`,
-`getUserCredits`, and `rotateAdminKey` with a credits-only management key. Credit writes
+`getUserCredits`, `getUserStatus`, and `rotateAdminKey` with a credits-only management key.
+`listUsers` and the webhook verifier (`constructWebhookEvent`) are server-side too. Credit writes
 require your own idempotency key. See the
 [TypeScript README](./TypeScript/README.md#credits-api-for-your-own-payment-system) for
 recipes.

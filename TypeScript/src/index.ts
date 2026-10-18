@@ -1,17 +1,23 @@
 export { Weirgate, type WeirgateOptions } from "./client.js";
 export {
+  BudgetExhaustedError,
+  DeveloperCreditExhaustedError,
   FundingRailError,
   FundingRailRefusedError,
   FundingRailUnavailableError,
   InsufficientBalanceError,
   PlanReconnectRequiredError,
+  PlatformAllowanceExhaustedError,
+  ProviderRateLimitedError,
   ResourceConflictError,
   UsageTruncatedError,
   UserCredentialExpiredError,
+  UserProviderKeyInvalidError,
   WeirgateError,
   WeirgateNetworkError,
   WeirgateProtocolError,
   WeirgateStreamError,
+  parseRetryAfter,
 } from "./errors.js";
 export {
   acceptsPlan,
@@ -27,3 +33,14 @@ export {
   type PlanRefreshResult,
 } from "./funding.js";
 export * from "./types.js";
+export {
+  WEBHOOK_EVENT_TYPES,
+  WEBHOOK_TOLERANCE_SECONDS,
+  WebhookSignatureError,
+  constructWebhookEvent,
+  isWebhookEventType,
+  verifyWebhookSignature,
+  type WebhookEvent,
+  type WebhookEventType,
+  type WebhookVerifyInput,
+} from "./webhooks.js";

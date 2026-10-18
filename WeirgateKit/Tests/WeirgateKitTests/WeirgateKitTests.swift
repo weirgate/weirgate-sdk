@@ -200,12 +200,76 @@ func errorRegistry() {
         "insufficient_balance", "abuse_blocked", "feature_disabled", "feature_not_found", "resource_not_found",
         "resource_conflict",
         "provider_policy_blocked", "output_contract_unsupported", "output_contract_violation",
-        "proposal_stale", "rate_limited", "telemetry_request_unavailable",
-        "provider_unavailable", "purchase_invalid_signature", "purchase_wrong_app",
+        "proposal_stale", "rate_limited", "budget_exhausted", "telemetry_request_unavailable",
+        "provider_unavailable", "developer_credit_exhausted", "provider_rate_limited",
+        "purchase_invalid_signature", "purchase_wrong_app",
         "purchase_environment_mismatch", "purchase_unknown_product", "purchase_revoked",
         "purchase_account_mismatch", "funding_rail_refused", "funding_rail_unavailable",
-        "user_credential_expired", "internal", "unrecognized"
+        "user_credential_expired", "platform_allowance_exhausted", "internal", "unrecognized"
     ]))
+}
+
+@Test("the 2026-10-18 error types decode with Retry-After and are never a paywall")
+func capacityErrorTypes() async throws {
+    let cases: [(String, Int, String?, WeirgateErrorType, TimeInterval?)] = [
+        ("developer_credit_exhausted", 503, nil, .developerCreditExhausted, nil),
+        ("provider_rate_limited", 503, "7", .providerRateLimited, 7),
+        ("platform_allowance_exhausted", 429, "86400", .platformAllowanceExhausted, 86400),
+        ("budget_exhausted", 429, "3600", .budgetExhausted, 3600),
+    ]
+    for (raw, status, retryAfter, expected, seconds) in cases {
+        let (client, tearDown) = stubbedClient { request in
+            errorResponse(request, status: status, type: raw, headers: retryAfter.map { ["Retry-After": $0] } ?? [:])
+        }
+        defer { tearDown() }
+        do {
+            _ = try await client.balance()
+            Issue.record("expected an error for \(raw)")
+        } catch let error as WeirgateError {
+            #expect(error.type == expected)
+            #expect(error.rawType == raw)
+            #expect(error.statusCode == status)
+            #expect(error.retryAfter == seconds)
+            #expect(error.mustNotShowPaywall)
+        }
+    }
+    #expect(Set(WeirgateErrorType.allCases.filter(\.mustNotShowPaywall)) == [
+        .developerCreditExhausted, .providerRateLimited, .platformAllowanceExhausted, .budgetExhausted,
+    ])
+    #expect(!WeirgateErrorType.outOfAllowance.mustNotShowPaywall)
+    #expect(!WeirgateErrorType.insufficientBalance.mustNotShowPaywall)
+}
+
+@Test("user_provider_key_invalid exposes detail.reason")
+func userProviderKeyInvalidReason() async throws {
+    for (raw, expected) in [
+        ("invalid", UserProviderKeyInvalidReason.invalid),
+        ("out_of_credit", .outOfCredit),
+        ("frozen", .unrecognized("frozen")),
+    ] {
+        let (client, tearDown) = stubbedClient { request in
+            errorResponse(request, status: 422, type: "user_provider_key_invalid", reason: raw)
+        }
+        defer { tearDown() }
+        do {
+            _ = try await client.balance()
+            Issue.record("expected an error")
+        } catch let error as WeirgateError {
+            #expect(error.type == .userProviderKeyInvalid)
+            #expect(error.userProviderKeyInvalidReason == expected)
+            #expect(!error.mustNotShowPaywall)
+        }
+    }
+    let (other, tearDown) = stubbedClient { request in
+        errorResponse(request, status: 400, type: "invalid_request", reason: "invalid")
+    }
+    defer { tearDown() }
+    do {
+        _ = try await other.balance()
+        Issue.record("expected an error")
+    } catch let error as WeirgateError {
+        #expect(error.userProviderKeyInvalidReason == nil)
+    }
 }
 
 @Test("an error type newer than the SDK is unrecognized and keeps the server's value, message, and detail")
@@ -308,9 +372,9 @@ func providerKeyRedaction() throws {
 
 @Test("package records frozen spec provenance")
 func provenance() {
-    #expect(WeirgateKitInfo.version == "0.6.0")
+    #expect(WeirgateKitInfo.version == "0.7.0")
     #expect(WeirgateKitInfo.apiVersion == "2026-07-18")
-    #expect(WeirgateKitInfo.specSourceCommit == "dd685e8a7a0f3ba7ad5f58111780aa4d06afeaca")
+    #expect(WeirgateKitInfo.specSourceCommit == "951691c40198d396ed0688e85e94aac30cf11a9e")
 }
 
 // MARK: - Balance
