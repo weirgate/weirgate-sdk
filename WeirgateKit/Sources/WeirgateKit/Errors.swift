@@ -7,6 +7,8 @@ public enum WeirgateErrorType: String, Codable, CaseIterable, Sendable {
     case invalidRequest = "invalid_request"
     case invalidToken = "invalid_token"
     case userProviderKeyRequired = "user_provider_key_required"
+    /// The end user's own provider key was rejected (422). See
+    /// ``WeirgateError/userProviderKeyInvalidReason``: `invalid` or `out_of_credit`.
     case userProviderKeyInvalid = "user_provider_key_invalid"
     case insufficientScope = "insufficient_scope"
     case outOfAllowance = "out_of_allowance"
@@ -21,8 +23,20 @@ public enum WeirgateErrorType: String, Codable, CaseIterable, Sendable {
     case outputContractViolation = "output_contract_violation"
     case proposalStale = "proposal_stale"
     case rateLimited = "rate_limited"
+    /// The app's developer-funded spend reached its monthly or daily budget (429). Only on
+    /// the developer rail and never the end user's doing: **never show a paywall**.
+    /// ``WeirgateError/retryAfter`` is the seconds until the budget period resets.
+    case budgetExhausted = "budget_exhausted"
     case telemetryRequestUnavailable = "telemetry_request_unavailable"
     case providerUnavailable = "provider_unavailable"
+    /// The app owner's provider key is out of credit (503). Not the end user's doing:
+    /// **never show a paywall**. A feature whose chain lists a user rail after `developer`
+    /// already fell through inside the request; otherwise the app may fall back (for
+    /// example to the user's own key) or retry later. `detail`: `provider`, `next_rail`.
+    case developerCreditExhausted = "developer_credit_exhausted"
+    /// The provider throttled the request (503). Retry after ``WeirgateError/retryAfter``
+    /// when set. **Never show a paywall.** `detail`: `rail`, `provider`.
+    case providerRateLimited = "provider_rate_limited"
     case purchaseInvalidSignature = "purchase_invalid_signature"
     case purchaseWrongApp = "purchase_wrong_app"
     case purchaseEnvironmentMismatch = "purchase_environment_mismatch"
@@ -32,6 +46,11 @@ public enum WeirgateErrorType: String, Codable, CaseIterable, Sendable {
     case fundingRailRefused = "funding_rail_refused"
     case fundingRailUnavailable = "funding_rail_unavailable"
     case userCredentialExpired = "user_credential_expired"
+    /// The app's Weirgate plan used its included calls or tokens for the UTC month (429).
+    /// Never the end user's fault: show "temporarily unavailable", **never a paywall**.
+    /// ``WeirgateError/retryAfter`` is the seconds until the month resets; `detail`:
+    /// `tier`, `meter`, `used`, `included`, `period`, `resets_at`.
+    case platformAllowanceExhausted = "platform_allowance_exhausted"
     case internalError = "internal"
     /// A type this SDK version doesn't know. Never sent by the server; see ``WeirgateError/rawType``.
     case unrecognized
@@ -43,6 +62,34 @@ public enum WeirgateErrorType: String, Codable, CaseIterable, Sendable {
 
     public init(from decoder: Decoder) throws {
         self.init(serverValue: try decoder.singleValueContainer().decode(String.self))
+    }
+
+    /// True for types that are never the end user's doing (``developerCreditExhausted``,
+    /// ``providerRateLimited``, ``platformAllowanceExhausted``, ``budgetExhausted``): show a
+    /// "temporarily unavailable" message, never a paywall or purchase prompt.
+    public var mustNotShowPaywall: Bool {
+        switch self {
+        case .developerCreditExhausted, .providerRateLimited, .platformAllowanceExhausted, .budgetExhausted: true
+        default: false
+        }
+    }
+}
+
+/// Why the end user's own provider key was rejected (`user_provider_key_invalid`,
+/// `detail.reason`). Open-ended: a reason newer than the SDK is ``unrecognized(_:)``.
+public enum UserProviderKeyInvalidReason: Sendable, Equatable {
+    /// The provider refused the key: ask the user to fix or replace it.
+    case invalid
+    /// The key's provider account has no credit: ask the user to add credit there.
+    case outOfCredit
+    case unrecognized(String)
+
+    public init(serverValue: String) {
+        switch serverValue {
+        case "invalid": self = .invalid
+        case "out_of_credit": self = .outOfCredit
+        default: self = .unrecognized(serverValue)
+        }
     }
 }
 
@@ -62,7 +109,10 @@ public struct WeirgateError: LocalizedError, WeirgateCorrelatedError, Sendable {
     public let apiVersion: String
     public let serverMessage: String?
     public let detail: [String: JSONValue]?
-    /// Seconds from the `Retry-After` header, when the server sent one.
+    /// Seconds from the `Retry-After` header (delta-seconds, or an HTTP date as seconds from
+    /// now), when the server sent one: on `rate_limited`, `budget_exhausted`,
+    /// `platform_allowance_exhausted`, `provider_rate_limited` (when the provider sent one),
+    /// and `provider_unavailable` while Apple's keys are unavailable.
     public internal(set) var retryAfter: TimeInterval? = nil
 
     init(
@@ -91,6 +141,15 @@ public struct WeirgateError: LocalizedError, WeirgateCorrelatedError, Sendable {
         if case .string(let value) = detail?["reason"] { return value }
         return nil
     }
+
+    /// `detail.reason` of a `user_provider_key_invalid` error; nil for other types.
+    public var userProviderKeyInvalidReason: UserProviderKeyInvalidReason? {
+        guard type == .userProviderKeyInvalid, let reason else { return nil }
+        return UserProviderKeyInvalidReason(serverValue: reason)
+    }
+
+    /// See ``WeirgateErrorType/mustNotShowPaywall``.
+    public var mustNotShowPaywall: Bool { type.mustNotShowPaywall }
 
     public var errorDescription: String? {
         "Weirgate request failed with \(rawType) (HTTP \(statusCode))."

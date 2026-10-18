@@ -1,0 +1,8 @@
+{
+  "description": "Produced by the weirgate server's own webhookSignature() at weirgate 951691c with a throwaway test secret; not a real endpoint secret.",
+  "source_commit": "951691c40198d396ed0688e85e94aac30cf11a9e",
+  "secret": "whsec_test_sdk_vector_0123456789abcdef",
+  "timestamp": 1760788800,
+  "body": "{\"id\":\"evt_test_1\",\"type\":\"user_key.rejected\",\"created_at\":\"2025-10-18T12:00:00.000Z\",\"app_id\":\"app_test\",\"user_id\":\"usr_test\",\"data\":{\"external_id\":\"user-1\",\"reason\":\"out_of_credit\",\"funding_rail\":\"user_key\",\"provider\":\"openrouter\",\"feature_id\":\"chat\",\"request_id\":\"req_00000000-0000-4000-8000-000000000000\",\"window_start\":\"2025-10-18T12:00:00.000Z\"}}",
+  "signature": "v1=6b233a582cecc62fa0b3857bbf727fb933d43b578cf5601335d662a6b30e30c0"
+}

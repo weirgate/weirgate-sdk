@@ -170,9 +170,57 @@ export interface paths {
         put?: never;
         /**
          * App Store Server Notifications v2 endpoint for one app
-         * @description Paste https://api.weirgate.com/v1/apple/notifications/<appId> into App Store Connect as both the production and sandbox Server Notifications URL (Version 2). Authentication is Apple's signature on signedPayload and on the inner signedTransactionInfo, plus the app's bundle ID, App Apple ID (production), and an enabled environment. Any failure, including an unknown app, returns purchase_invalid_signature with no detail. Duplicate notificationUUIDs are acknowledged without effect. ONE_TIME_CHARGE grants the consumable to the user whose app_account_token it carries (same once-per-transaction rule as the redeem route); REFUND reverses the grant, and the balance may go below zero (a refund seen before any redeem is recorded so the purchase can't be redeemed later); REFUND_REVERSED grants it again (key apple-rr:<transactionId>); CONSUMPTION_REQUEST sends a consumption report only when payments.apple.send_consumption_info is on and App Store Server API credentials are stored; TEST is recorded for the doctor; other types are acknowledged and recorded. For products mapped as kind subscription: SUBSCRIBED, DID_RENEW, OFFER_REDEEMED, RENEWAL_EXTENDED, and DID_CHANGE_RENEWAL_PREF/UPGRADE start or extend the plan (a downgrade or crossgrade to another duration takes effect at the renewal that starts the new period); DID_FAIL_TO_RENEW/GRACE_PERIOD keeps it until gracePeriodExpiresDate (signedRenewalInfo); EXPIRED, GRACE_PERIOD_EXPIRED, and REVOKE end it; REFUND of the current period ends it and expires this month's unspent allowance (never below what was spent); REFUND_REVERSED reinstates it while the period is current. Records are ordered by signedDate, so an older or duplicate record changes nothing, and each transaction is recorded once. The owner is the subscription's first owner (by originalTransactionId), else the user whose appAccountToken the transaction carries; an unattributed subscription is recorded until the app redeems it. Outcomes start with subscription_ (active, expired, revoked, refunded, unchanged, unattributed).
+         * @description Paste https://api.weirgate.com/v1/apple/notifications/<app_id> into App Store Connect as both the production and sandbox Server Notifications URL (Version 2). Authentication is Apple's signature on signedPayload and on the inner signedTransactionInfo, plus the app's bundle ID, App Apple ID (production), and an enabled environment. Any failure, including an unknown app, returns purchase_invalid_signature with no detail. Duplicate notificationUUIDs are acknowledged without effect. ONE_TIME_CHARGE grants the consumable to the user whose app_account_token it carries (same once-per-transaction rule as the redeem route); REFUND reverses the grant, and the balance may go below zero (a refund seen before any redeem is recorded so the purchase can't be redeemed later); REFUND_REVERSED grants it again (key apple-rr:<transactionId>); CONSUMPTION_REQUEST sends a consumption report only when payments.apple.send_consumption_info is on and App Store Server API credentials are stored; TEST is recorded for the doctor; other types are acknowledged and recorded. For products mapped as kind subscription: SUBSCRIBED, DID_RENEW, OFFER_REDEEMED, RENEWAL_EXTENDED, and DID_CHANGE_RENEWAL_PREF/UPGRADE start or extend the plan (a downgrade or crossgrade to another duration takes effect at the renewal that starts the new period); DID_FAIL_TO_RENEW/GRACE_PERIOD keeps it until gracePeriodExpiresDate (signedRenewalInfo); EXPIRED, GRACE_PERIOD_EXPIRED, and REVOKE end it; REFUND of the current period ends it and expires this month's unspent allowance (never below what was spent); REFUND_REVERSED reinstates it while the period is current. Records are ordered by signedDate, so an older or duplicate record changes nothing, and each transaction is recorded once. The owner is the subscription's first owner (by originalTransactionId), else the user whose appAccountToken the transaction carries; an unattributed subscription is recorded until the app redeems it. Outcomes start with subscription_ (active, expired, revoked, refunded, unchanged, unattributed).
          */
         post: operations["receiveAppleNotification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/alert-recipients/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Page behind the link in an alert recipient confirmation email
+         * @description Renders a page with a Confirm button and changes nothing, so a mail scanner that follows the link confirms nothing. No account is needed; the token is the credential.
+         */
+        get: operations["getAlertRecipientConfirmPage"];
+        put?: never;
+        /**
+         * Confirm an alert recipient outside the team
+         * @description Uses the confirmation token once (form field or query `token`): the address starts receiving the team's alert emails. Tokens are 256 random bits, stored only as a hash, and expire 72 hours after the email was sent (410). An unknown or already used token is 404. Audited as alert.recipient.confirmed. At most 10 POSTs per client per 10 minutes on these pages (429).
+         */
+        post: operations["confirmAlertRecipient"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/alert-recipients/unsubscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Page behind the unsubscribe link in an alert email to a confirmed non-member
+         * @description Renders a page with an Unsubscribe button and changes nothing.
+         */
+        get: operations["getAlertRecipientUnsubscribePage"];
+        put?: never;
+        /**
+         * Stop alert emails to a confirmed address outside the team
+         * @description Stops delivery to the address the token names (form field or query `token`; a one-click POST per RFC 8058 works too). The token is an HMAC checked before any database read and works for every alert sent to that address. The same 200 answers whether or not it was still subscribed. Audited as alert.recipient.unsubscribed when it changes. The address stays in the tenant config, shown as unsubscribed, until a proposal removes it; adding it again sends a new confirmation.
+         */
+        post: operations["unsubscribeAlertRecipient"];
         delete?: never;
         options?: never;
         head?: never;
@@ -527,6 +575,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/provider-policy/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List models with list prices and whether the provider policy allows each
+         * @description Read-only platform data for choosing a feature's `model`. Prices come from OpenRouter's public model lists, fetched on demand and cached for 24 hours (`as_of`). OpenRouter routes carry OpenRouter's list price (`price_basis: list`); models under the direct-provider slots (`openai`, `google`, `xai`) carry it as a reference price (`price_basis: openrouter_reference`). A direct-provider row is listed only when OpenRouter's `canonical_slug` confirms its id is the vendor's native id (the OpenRouter id without the vendor prefix); Anthropic, open-weight models, OpenRouter variants (`:free`), and presets (`-high`) are listed only under `openrouter`. When a refresh fails the last cached copy is served with `stale: true`; with nothing cached `data` is empty and `as_of` is null. `policy` applies the current provider policy the way request routing does: a model whose provider is blocked for a key source is `allowed: false` for it (developer-key blocks take effect after `grace_until`), and `reason_code` / `reason` say why.
+         */
+        get: operations["listCatalogModels"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/provider-keys": {
         parameters: {
             query?: never;
@@ -704,7 +772,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List visible durable webhook proposals */
+        /**
+         * List visible durable webhook proposals
+         * @description The platform key lists the tenant that tenant_id names, else the tenant of the app_id it names, else every tenant (audited in each). A named tenant or app that doesn't exist is resource_not_found.
+         */
         get: operations["listWebhookProposals"];
         put?: never;
         post?: never;
@@ -903,7 +974,7 @@ export interface paths {
         put?: never;
         /**
          * Add or deduct credits with a signed history entry
-         * @description Records a positive or negative adjustment and returns the resulting balance. Creates the user when externalId is unknown, matching the grant endpoint. A negative adjustment that would take available below zero fails with insufficient_balance (detail.available, detail.units), unless allow_negative is true. allow_negative defaults to true when reason is clawback and false otherwise. X-Idempotency-Key is required: the same key and body replay the original result with idempotent=true; the same key with a different body returns resource_conflict. Requires the credits tool group. Clerk dashboard sessions require recent second-factor verification. Emits credits.adjusted.
+         * @description Records a positive or negative adjustment and returns the resulting balance. Creates the user when external_id is unknown, matching the grant endpoint. A negative adjustment that would take available below zero fails with insufficient_balance (detail.available, detail.units), unless allow_negative is true. allow_negative defaults to true when reason is clawback and false otherwise. X-Idempotency-Key is required: the same key and body replay the original result with idempotent=true; the same key with a different body returns resource_conflict. Requires the credits tool group. Clerk dashboard sessions require recent second-factor verification. Emits credits.adjusted.
          */
         post: operations["adjustCredits"];
         delete?: never;
@@ -928,13 +999,13 @@ export interface paths {
         get?: never;
         /**
          * Schedule a configured tier for an app user
-         * @description Creates the user when externalId is unknown, matching the grant endpoint. The assigned tier becomes active on that user's first lazy allowance grant in the next UTC calendar month. Exception: assigning an unlimited tier, or any change while the active tier is unlimited, takes effect immediately. expires_at (optional, RFC 3339, in the future and after the assignment takes effect) ends the assignment; when omitted it defaults to the start plus the tier's default_duration_days, if set, and otherwise the assignment is open-ended. An ended assignment returns the user to the app's default tier on the next balance read or metered request (and at the end time for idle users), recorded as an expire change with a tier.expired webhook; tier.expiring is sent expiry_notice_days (default 3) before. top_up_now additionally grants only the positive, not-yet-credited difference between the active and target monthly allowances for the current UTC month (it expires with that month when the target tier's allowance_rollover is expire); downgrades never claw back units. Replays with the same X-Idempotency-Key do not repeat the mutation, audit event, or top-up. Requires apply scope and the plans tool group. Clerk dashboard sessions require recent second-factor verification.
+         * @description Creates the user when external_id is unknown, matching the grant endpoint. The assigned tier becomes active on that user's first lazy allowance grant in the next UTC calendar month. Exception: assigning an unlimited tier, or any change while the active tier is unlimited, takes effect immediately. expires_at (optional, RFC 3339, in the future and after the assignment takes effect) ends the assignment; when omitted it defaults to the start plus the tier's default_duration_days, if set, and otherwise the assignment is open-ended. An ended assignment returns the user to the app's default tier on the next balance read or metered request (and at the end time for idle users), recorded as an expire change with a tier.expired webhook; tier.expiring is sent expiry_notice_days (default 3) before. top_up_now additionally grants only the positive, not-yet-credited difference between the active and target monthly allowances for the current UTC month (it expires with that month when the target tier's allowance_rollover is expire); downgrades never claw back units. Replays with the same X-Idempotency-Key do not repeat the mutation, audit event, or top-up. Requires apply scope and the plans tool group. Clerk dashboard sessions require recent second-factor verification.
          */
         put: operations["assignUserTier"];
         post?: never;
         /**
          * Schedule a user to return to the app default tier
-         * @description Creates the user when externalId is unknown, matching the grant endpoint, and schedules the app's current default tier for the next UTC calendar month. When the active tier is unlimited the revert takes effect immediately. top_up_now follows the same positive-delta, no-clawback semantics as assignment. Requires apply scope and the plans tool group. Clerk dashboard sessions require recent second-factor verification.
+         * @description Creates the user when external_id is unknown, matching the grant endpoint, and schedules the app's current default tier for the next UTC calendar month. When the active tier is unlimited the revert takes effect immediately. top_up_now follows the same positive-delta, no-clawback semantics as assignment. Requires apply scope and the plans tool group. Clerk dashboard sessions require recent second-factor verification.
          */
         delete: operations["revertUserTier"];
         options?: never;
@@ -979,6 +1050,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/apps/{app_id}/failures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List recent refused and failed metered requests, newest first
+         * @description Refusals (typed 4xx such as budget_exhausted or out_of_allowance) and request errors (5xx, from the ops.request_error audit) of the app's metered routes, each with the request id that Request trace resolves. Refusal rows are kept 30 days and at most 1,000 per app, error type, and UTC hour (the hourly counters behind /usage stay exact); they exist from the 2026-10-11 S4 release on. A refusal names the end user by opaque user id (user_id, from 2026-10-18); no prompt, response, or external id is returned. A rejected end-user credential (user_provider_key_invalid, user_credential_expired) and developer_credit_exhausted are refusals, not request errors.
+         */
+        get: operations["listFailures"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/apps/{app_id}/pricing-insights": {
         parameters: {
             query?: never;
@@ -988,7 +1079,7 @@ export interface paths {
         };
         /**
          * Query closed-window per-user pricing distributions
-         * @description Percentiles are null below 20 users with typed insufficient_samples evidence.
+         * @description Percentiles are null below 20 users with typed insufficient_samples evidence. sample=small adds insufficient_evidence to each group and, below the minimum, small_sample: mean, min, max, and the per-user list (internal user IDs). The same closed-window rule applies; percentiles stay gated at 20 users.
          */
         get: operations["getPricingInsights"];
         put?: never;
@@ -1064,12 +1155,32 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List active users for an app
-         * @description Each row reports unlimited and unlimited_until with the same meaning as GET /v1/balance and the single-user read: an assignment whose end has passed is not reported as unlimited.
+         * List, filter, sort, or export active users for an app
+         * @description Each row reports unlimited and unlimited_until with the same meaning as GET /v1/balance and the single-user read: an assignment whose end has passed is not reported as unlimited. Filters combine with AND; pagination.total counts the users matching them, ignoring cursor and limit, up to 10,000: when more match, total is 10,000 and pagination.total_capped is true (show it as "10,000+"). The count is capped so a page reads a bounded number of rows however many users the app has. spend_units is units settled, all time; last_active_at is the user's latest settled request; paying means a consumable purchase that is not refunded, or an active subscription, in the live environment (the test environment for a test-environment key). sort defaults to id (ascending); every other sort defaults to direction desc and breaks ties by id. A cursor is valid only for the sort and direction that issued it. format=csv returns the same filters and order as CSV (header row, CRLF line ends), at most 10,000 rows from the cursor on; X-Weirgate-Total-Count (capped at 10,000), X-Weirgate-Total-Capped, and X-Weirgate-Truncated report the match count, whether it is capped, and whether rows were cut. Text cells starting with =, +, -, @, tab, or carriage return are prefixed with an apostrophe so spreadsheets do not run them. Requires the usage tool group.
          */
         get: operations["listUsers"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/apps/{app_id}/grants/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Grant or deduct credits for a filtered set of users, in two steps
+         * @description Step 1, preview (dry_run true): resolves filter (the users listing's filters) in user-id order, at most 500 users per call, and returns the matched count, the count this call covers, a sample, would_refuse (deductions the balance would refuse), and a preview_token bound to that exact user set and body for one hour. A larger segment continues by previewing again with next_cursor. Positive units are grants (source defaults to bulk; reason is kept in the audit log); negative units are adjustments with the same rules as the single adjustment route, including insufficient_balance unless allow_negative. Step 2, apply: send only preview_token with X-Idempotency-Key. Each user's write uses the key bulk:<X-Idempotency-Key>:<user id>, so a retry with the same key and token replays (idempotent true) and writes nothing new, even after the preview expires. The same key with another token, or the same token with another key, returns resource_conflict. Users deleted since the preview are skipped (user_unavailable); results report each user's status and balance. Every new grant or adjustment writes its own audit row (grant.created or credits.adjusted, with bulk_preview) and webhook event, so a 500-user call can emit 500 webhook events; the first apply also writes one grant.bulk_applied summary row. Requires apply scope and the credits tool group. Clerk dashboard sessions require recent second-factor verification for both steps.
+         */
+        post: operations["bulkGrant"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1085,9 +1196,49 @@ export interface paths {
         };
         /**
          * List verified store purchases for an app, newest first
-         * @description Requires the credits or usage tool group. environment filters by test (Apple sandbox) or live (production); a test-environment key sees only test purchases. external_id narrows to one user. Apple's raw signed claims are not returned.
+         * @description Requires the credits or usage tool group. environment filters by test (Apple sandbox) or live (production); a test-environment key sees only test purchases. external_id narrows to one user. since (inclusive) and until (exclusive) bound when Weirgate recorded the purchase. Apple's raw signed claims are not returned.
          */
         get: operations["listPurchases"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/apps/{app_id}/revenue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Summarize store revenue by product for a window
+         * @description Requires the credits or usage tool group. Applies each product's configured price_usd and proceeds (commission or proceeds_pct) as configured now (price_basis current) to the verified purchases Weirgate recorded in the window (since inclusive, until exclusive; both optional). environment defaults to live; a test-environment key sees only test purchases. A purchase whose status is refunded counts under refunds and not under net. Products without price_usd report counts and units with null money; totals add priced products only and unpriced_purchases counts the rest. by_day is net of refunds. Weirgate never charges these amounts: Apple charges the user and pays the developer.
+         */
+        get: operations["getRevenue"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/apps/{app_id}/liability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Credits users hold now, valued at the cost to serve them
+         * @description Requires the usage tool group. Sums positive balances of active users. The purchased part of each balance is min(balance, unreversed purchase grants), so free credits (allowance, welcome, manual) count as spent first; free is the rest. USD values use the developer cost per unit over the trailing 30 days (null with cost_basis no_recent_usage when no developer-funded request debited units). Negative balances are reported separately and never offset the total.
+         */
+        get: operations["getCreditLiability"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1150,6 +1301,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/apps/{app_id}/users/{external_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Why a user is blocked now
+         * @description Requires the usage or credits tool group. One indexed read of what refuses the user's requests now (no units left on a developer-funded feature, a full velocity window, the in-flight cap) plus their refusals of the last 24 hours. Never provisions the user or opens a month. The same object is the `status` field of the user read.
+         */
+        get: operations["getUserStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/apps/{app_id}/users/{external_id}/export": {
         parameters: {
             query?: never;
@@ -1174,7 +1345,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read visible tenant configuration and current revisions */
+        /**
+         * Read visible tenant configuration and current revisions
+         * @description A tenant key or dashboard session reads its own tenant. The platform key reads the tenant that tenant_id names, in the same one-tenant shape, and is audited only in that tenant; without tenant_id it reads the whole document (every tenant and a revision map) and is audited in every tenant.
+         */
         get: operations["getConfig"];
         /**
          * Apply a config document directly with apply scope
@@ -1195,7 +1369,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List visible durable proposals across config, rules, and webhooks */
+        /**
+         * List visible durable proposals across config, rules, and webhooks
+         * @description The platform key lists the tenant that tenant_id names, else the tenant of the app_id it names, else every tenant (audited in each). A named tenant or app that doesn't exist is resource_not_found.
+         */
         get: operations["listConfigProposals"];
         put?: never;
         /**
@@ -1237,7 +1414,7 @@ export interface paths {
         put?: never;
         /**
          * Apply a proposal by reference with base-revision CAS
-         * @description A Clerk developer session requires a recent second factor.
+         * @description A Clerk developer session requires a recent second factor. If the change commits but the response or a follow-up step fails, the route returns the committed revision, or `500 internal` with `detail.applied: true`, `proposal_id`, and `revision`; replaying the apply then returns that revision with `idempotent: true`.
          */
         post: operations["applyConfigProposal"];
         delete?: never;
@@ -1263,6 +1440,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/alerts/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read tenant alert settings, recipients, and the last send per class
+         * @description Alerts are evaluated in the activity-driven ops check (about a minute after API traffic, at most every five minutes); budget alerts fire once per app and UTC period, the others once per incident until it clears. Change settings with a config proposal (`alerts` in the tenant document).
+         */
+        get: operations["getAlertState"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/alerts/recipients/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a new confirmation email to a configured alert address outside the team
+         * @description For a configured `alerts.recipients` address that isn't a tenant member's (pending or unsubscribed). Sends a new single-use link (72 hours) and makes any earlier link stop working. At most once per hour and three times per rolling 24 hours per address, the first email included (rate_limited with Retry-After). Tenant owners only (dashboard session), or the platform key with tenant_id. invalid_request with detail.reason recipient_not_configured, recipient_is_member, recipient_already_confirmed, or alerts_not_enabled. Audited as alert.recipient.confirmation_sent (address hash and masked address only).
+         */
+        post: operations["resendAlertRecipientConfirmation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/alerts/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a test alert email to the tenant's alert recipients
+         * @description Tenant owners only (dashboard session), or the platform key with tenant_id. One per tenant every 10 minutes (rate_limited with Retry-After). Audited as alert.sent with class test. invalid_request with detail.reason alerts_not_enabled until Weirgate enables alert email for the tenant.
+         */
+        post: operations["sendTestAlert"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/apps/{app_id}/budget": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the app's developer-funded spend against its budget
+         * @description Month-to-date and today's settled developer-funded provider cost from the spend counters, the configured budget (null when none), each period's state, a month-end projection at the month's run rate, and per-day spend for the month.
+         */
+        get: operations["getAppBudget"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/audit": {
         parameters: {
             query?: never;
@@ -1270,7 +1527,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Query tenant-scoped actor-attributed management audit events */
+        /**
+         * Query tenant-scoped actor-attributed management audit events
+         * @description Newest first, ordered by created_at and then id. A page with truncated true carries next_cursor; pass it as cursor, with the same filters, for the next older page. Pages chain without gaps or repeats, and events written while paging are newer than the cursor, so they don't shift later pages. include=total adds the number of events matching the filters, ignoring cursor and limit.
+         */
         get: operations["queryAudit"];
         put?: never;
         post?: never;
@@ -1432,7 +1692,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Join reservation, settlement, usage, and optional client timing by request id */
+        /** Join reservation, settlement, usage, optional client timing, and any refusal or error by request id */
         get: operations["getRequestTrace"];
         put?: never;
         post?: never;
@@ -1599,6 +1859,16 @@ export interface components {
             calls: components["schemas"]["BillingMeterConsumption"];
             tokens: components["schemas"]["BillingMeterConsumption"];
             blocked_at_cap: boolean;
+            /** @description Each app's share of this UTC month's calls and tokens, ordered by app id. The rows sum to `calls.used` and `tokens.used`. An app archived this month keeps its row: its usage still counts toward the tenant's plan. */
+            by_app: components["schemas"]["BillingAppUsage"][];
+        };
+        BillingAppUsage: {
+            app_id: string;
+            calls: number;
+            /** @description prompt_tokens + completion_tokens */
+            tokens: number;
+            prompt_tokens: number;
+            completion_tokens: number;
         };
         BillingMeterConsumption: {
             used: number;
@@ -1756,7 +2026,7 @@ export interface components {
          * @description Documented as open-ended: new types may be added under the current version. A client that doesn't recognize a type handles it by HTTP status and keeps the value, the message, and the request ID for support; it must not treat it as `internal`.
          * @enum {string}
          */
-        ErrorType: "invalid_request" | "invalid_token" | "user_provider_key_required" | "user_provider_key_invalid" | "insufficient_scope" | "out_of_allowance" | "insufficient_balance" | "abuse_blocked" | "feature_disabled" | "feature_not_found" | "resource_not_found" | "resource_conflict" | "provider_policy_blocked" | "output_contract_unsupported" | "output_contract_violation" | "proposal_stale" | "rate_limited" | "telemetry_request_unavailable" | "provider_unavailable" | "purchase_invalid_signature" | "purchase_wrong_app" | "purchase_environment_mismatch" | "purchase_unknown_product" | "purchase_revoked" | "purchase_account_mismatch" | "funding_rail_refused" | "funding_rail_unavailable" | "user_credential_expired" | "internal";
+        ErrorType: "invalid_request" | "invalid_token" | "user_provider_key_required" | "user_provider_key_invalid" | "insufficient_scope" | "out_of_allowance" | "insufficient_balance" | "abuse_blocked" | "feature_disabled" | "feature_not_found" | "resource_not_found" | "resource_conflict" | "provider_policy_blocked" | "output_contract_unsupported" | "output_contract_violation" | "proposal_stale" | "rate_limited" | "budget_exhausted" | "telemetry_request_unavailable" | "provider_unavailable" | "developer_credit_exhausted" | "provider_rate_limited" | "purchase_invalid_signature" | "purchase_wrong_app" | "purchase_environment_mismatch" | "purchase_unknown_product" | "purchase_revoked" | "purchase_account_mismatch" | "funding_rail_refused" | "funding_rail_unavailable" | "user_credential_expired" | "platform_allowance_exhausted" | "internal";
         ErrorEnvelope: {
             error: {
                 type: components["schemas"]["ErrorType"];
@@ -2077,6 +2347,7 @@ export interface components {
              */
             event_type: "timing";
             ttft_ms: number;
+            /** @description Must be at least ttft_ms. */
             content_complete_ms?: number;
             sdk?: {
                 name: string;
@@ -2108,7 +2379,8 @@ export interface components {
              * @enum {string}
              */
             modality: "chat" | "embedding" | "image" | "audio";
-            upstream?: components["schemas"]["Provider"];
+            /** @default openrouter */
+            upstream: components["schemas"]["Provider"];
             model: string;
             /** @default [] */
             fallback_models: string[];
@@ -2188,7 +2460,7 @@ export interface components {
             features: {
                 [key: string]: components["schemas"]["FeatureConfig"];
             };
-            ruleset?: components["schemas"]["GenericObject"];
+            ruleset?: components["schemas"]["Ruleset"];
             welcome_grant?: {
                 units: number;
                 /**
@@ -2235,13 +2507,27 @@ export interface components {
                             kind: "consumable";
                             /** @description Credits per unit purchased; a transaction's quantity multiplies it. */
                             units: number;
+                            /** @description Customer price in USD per unit purchased (at most two decimals). Developer-entered; Weirgate never charges it. Revenue and margin reads apply it. */
+                            price_usd?: number;
+                            /** @description Developer proceeds as a percent of price_usd for this product; overrides commission. */
+                            proceeds_pct?: number;
                         } | {
                             /** @enum {string} */
                             kind: "subscription";
                             /** @description The app tier an active Auto-Renewable Subscription assigns. Must exist. Set the tier's allowance_rollover to expire so its allowance resets monthly (a proposal warns otherwise); yearly plans refill monthly. */
                             tier: string;
+                            /** @description Customer price in USD per subscription period (at most two decimals). Developer-entered; revenue reads apply it to each period. */
+                            price_usd?: number;
+                            /** @description Developer proceeds as a percent of price_usd for this product; overrides commission. */
+                            proceeds_pct?: number;
                         };
                     };
+                    /**
+                     * @description App Store commission tier. standard keeps 70% of price_usd as developer proceeds; small_business (App Store Small Business Program) keeps 85%. A product's proceeds_pct overrides it.
+                     * @default standard
+                     * @enum {string}
+                     */
+                    commission: "standard" | "small_business";
                     /**
                      * @description Refuse purchase records without appAccountToken instead of crediting the caller.
                      * @default false
@@ -2259,16 +2545,203 @@ export interface components {
                     refund_preference?: "decline" | "grant_full" | "grant_prorated";
                 };
             };
+            /** @description Spend ceilings. Absent means no budget; requests are never refused for spend. */
+            budgets?: {
+                developer_funded?: components["schemas"]["DeveloperFundedBudget"];
+            };
+            /** @description Dashboard Needs attention rows the owner marked "not needed for this app". Where a tenant alert class has the same name (`apple_notifications_stale`, `webhook_failing`, `negative_balance`, `budget_warn`, `budget_exhausted`), that class stops sending for this app and its open incident closes. Absent: none. */
+            attention?: {
+                /** @default [] */
+                dismissed: ("apple_notifications_stale" | "apple_credentials_missing" | "apple_products_missing" | "prices_missing" | "webhook_missing" | "webhook_failing" | "negative_balance" | "welcome_unclaimed" | "allowance_exhausted" | "budget_warn" | "budget_exhausted")[];
+            };
+        };
+        /** @description A ceiling on the provider cost the app owner pays (the developer funding rail) per UTC month and optionally per UTC day. Spend is the settled provider cost of developer-funded requests, kept in a counter updated by each settlement. With on_exhausted stop, a developer-funded request is refused with budget_exhausted once the period's settled spend reaches the cap; requests already in flight may each overshoot it. User-funded rails are never checked. allow keeps serving and only alerts. */
+        DeveloperFundedBudget: {
+            usd_per_month: number;
+            usd_per_day?: number;
+            /**
+             * @description The budget_warn alert fires at this share of a cap.
+             * @default 80
+             */
+            warn_at_pct: number;
+            /**
+             * @default stop
+             * @enum {string}
+             */
+            on_exhausted: "stop" | "allow";
+        };
+        /** @description Tenant alert email, sent from alerts@weirgate.com. Every class and the weekly digest are on by default. Budget thresholds live on each app's budget. */
+        TenantAlerts: {
+            /** @description Absent means every tenant member's primary email. An explicit list sends to these addresses instead: a member's address receives alerts at once; any other address first gets one confirmation email (when the config change applies) and receives alerts only after it confirms, until it unsubscribes. This applies to every tenant, including tenants with no members. */
+            recipients?: string[];
+            classes?: {
+                budget_warn?: components["schemas"]["AlertToggle"];
+                budget_exhausted?: components["schemas"]["AlertToggle"];
+                provider_unhealthy?: components["schemas"]["AlertToggle"];
+                /** @description Fires when a provider key a live developer-funded feature uses has less credit left than `below_pct_of_limit` of the key's own limit, or less than `below_usd`. `below_usd` is ignored for a key whose limit is at most twice it; with no key limit (account credit only), only `below_usd` applies. Only OpenRouter reports credit. */
+                provider_credit_low?: {
+                    /** @default true */
+                    enabled: boolean;
+                    /**
+                     * @description Alert below this share of the key's own spending limit.
+                     * @default 10
+                     */
+                    below_pct_of_limit: number;
+                    /**
+                     * @description Or below this many USD left. Ignored for a key whose limit is at most twice this.
+                     * @default 1
+                     */
+                    below_usd: number;
+                };
+                apple_notifications_stale?: {
+                    /** @default true */
+                    enabled: boolean;
+                    /** @description Also alert after this many days without a notification; absent alerts only when none ever arrived. */
+                    max_silence_days?: number;
+                };
+                webhook_failing?: components["schemas"]["AlertToggle"];
+                refusal_spike?: {
+                    /** @default true */
+                    enabled: boolean;
+                    /**
+                     * @description Refused requests in the last hour
+                     * @default 20
+                     */
+                    min_refusals: number;
+                    /**
+                     * @description Share of all requests in that hour
+                     * @default 25
+                     */
+                    min_refusal_pct: number;
+                };
+                negative_balance?: {
+                    /** @default true */
+                    enabled: boolean;
+                    /** @default 1 */
+                    min_users: number;
+                };
+                /** @description The tenant's Weirgate plan used 80% of its included calls or tokens; once per meter and UTC month, on every plan. */
+                platform_allowance_warning?: components["schemas"]["AlertToggle"];
+                /** @description A Free plan used all of its included calls or tokens and live requests are refused; once per UTC month. */
+                platform_allowance_exhausted?: components["schemas"]["AlertToggle"];
+            };
+            weekly_digest?: components["schemas"]["AlertToggle"];
+        };
+        AlertToggle: {
+            /** @default true */
+            enabled: boolean;
+        };
+        AlertLastSent: {
+            /** Format: date-time */
+            sent_at: string;
+            /** @description What the alert was about (app */
+            subject: string | null;
+            app_id: string | null;
+            recipients: number;
+            delivered: number;
+            audit_event_id: string;
+        };
+        AlertState: {
+            tenant_id: components["schemas"]["TenantId"];
+            /** @description False until Weirgate enables alert email for this tenant. */
+            delivery_enabled: boolean;
+            /** @description True when the tenant config has an alerts block; false means defaults. */
+            configured: boolean;
+            /** @description Who receives alerts. Management keys see masked addresses (j***@example.com); a dashboard session sees them in full. */
+            recipients: {
+                /** @enum {string} */
+                source: "config" | "members";
+                /** @description The addresses alerts go to now. */
+                addresses: string[];
+                /** @description Configured addresses that get no alerts now (pending or unsubscribed). */
+                skipped: number;
+                /** @description Each configured address and its status, in config order. Empty when recipients aren't configured. */
+                configured: components["schemas"]["AlertRecipientStatus"][];
+            };
+            /** @description Effective settings per class (defaults filled in). */
+            classes: {
+                [key: string]: {
+                    enabled: boolean;
+                };
+            };
+            weekly_digest: components["schemas"]["AlertToggle"];
+            /** @description Latest send per class (budget_warn, budget_exhausted, provider_unhealthy, provider_credit_low, apple_notifications_stale, webhook_failing, refusal_spike, negative_balance, platform_allowance_warning, platform_allowance_exhausted, weekly_digest, test). Classes never sent are absent. */
+            last_sent: {
+                [key: string]: components["schemas"]["AlertLastSent"];
+            };
+        };
+        AlertRecipientStatus: {
+            address: string;
+            /**
+             * @description member: a tenant member's sign-in email, no confirmation needed. pending: outside the team and not confirmed yet (no alerts). confirmed: receives alerts. unsubscribed: stopped them from an alert email (no alerts).
+             * @enum {string}
+             */
+            status: "member" | "pending" | "confirmed" | "unsubscribed";
+            /**
+             * Format: date-time
+             * @description Latest confirmation email; null for members and for an address never sent one.
+             */
+            confirmation_sent_at: string | null;
+            /**
+             * Format: date-time
+             * @description When the pending link expires (it may already have).
+             */
+            confirmation_expires_at: string | null;
+            /** Format: date-time */
+            confirmed_at: string | null;
+            /** Format: date-time */
+            unsubscribed_at: string | null;
+        };
+        AlertRecipientResendResult: {
+            address: string;
+            /** @enum {string} */
+            status: "pending";
+            /** Format: date-time */
+            confirmation_expires_at: string;
+            delivered: number;
+        };
+        AlertTestResult: {
+            recipients: number;
+            delivered: number;
+            message_ids: string[];
+        };
+        BudgetPeriod: {
+            /** @description UTC month (YYYY-MM) or day (YYYY-MM-DD). */
+            period: string;
+            /** @description Settled developer-funded provider cost in the period. */
+            spent_usd: number;
+            requests: number;
+            cap_usd: number | null;
+            /** @enum {string} */
+            state: "no_budget" | "ok" | "warning" | "exhausted" | "over_cap_allowed";
+            /** Format: date-time */
+            resets_at: string;
+            /** @description Month only. Month-to-date spend extrapolated at its run rate to the end of the month. */
+            projected_usd?: number;
+        };
+        AppBudget: {
+            app_id: components["schemas"]["AppId"];
+            budget: components["schemas"]["DeveloperFundedBudget"] | null;
+            month: components["schemas"]["BudgetPeriod"];
+            day: components["schemas"]["BudgetPeriod"];
+            /** @description Each UTC day of the current month with developer-funded spend. */
+            daily: {
+                date: string;
+                spent_usd: number;
+                requests: number;
+            }[];
         };
         TenantConfig: {
             tenant_id: components["schemas"]["TenantId"];
             name?: string;
             apps: components["schemas"]["AppConfig"][];
+            alerts?: components["schemas"]["TenantAlerts"];
         };
         ConfigDocument: {
             tenants: components["schemas"]["TenantConfig"][];
         };
         ManagementKeyMintInput: {
+            /** @description Required with the platform key; a tenant key or dashboard session mints for its own tenant and omits it. */
             tenant_id?: components["schemas"]["TenantId"];
             /**
              * @default read
@@ -2537,33 +3010,94 @@ export interface components {
              */
             user_checked_at?: string;
             user_reason_code?: string | null;
+            /** @description The provider-policy registry revision this entry came from (for example policy-registry-revision-3). Returned on config reads; config writes ignore it. */
+            readonly source?: string;
+        };
+        ProviderPolicyProviders: {
+            openrouter: components["schemas"]["ProviderPolicyEntry"];
+            openai: components["schemas"]["ProviderPolicyEntry"];
+            anthropic: components["schemas"]["ProviderPolicyEntry"];
+            google: components["schemas"]["ProviderPolicyEntry"];
+            xai: components["schemas"]["ProviderPolicyEntry"];
         };
         ProviderPolicyDocument: {
-            providers: {
-                openrouter: components["schemas"]["ProviderPolicyEntry"];
-                openai: components["schemas"]["ProviderPolicyEntry"];
-                anthropic: components["schemas"]["ProviderPolicyEntry"];
-                google: components["schemas"]["ProviderPolicyEntry"];
-                xai: components["schemas"]["ProviderPolicyEntry"];
-            };
+            providers: components["schemas"]["ProviderPolicyProviders"];
         };
         /**
-         * @description Documented as open-ended: new event types may be added under the current version. Consumers ignore types they don't handle (an endpoint created without `event_types` receives only the types that existed then).
+         * @description Documented as open-ended: new event types may be added under the current version. Consumers ignore types they don't handle (an endpoint created without `event_types` receives only the types that existed then). App-level events have `user_id: null`: `provider_policy.changed`; `provider.credit_exhausted` (a developer-funded request found the app's provider key out of credit; data.provider, funding_rail, feature_id, request_id, window_start; at most once per app, provider, and UTC hour); `provider.credit_restored` (the key's health probe reports credit again after an exhaustion; data.provider, exhausted_since, remaining_usd, basis; once per exhaustion); `provider.credit_low` (the probe found credit below the provider_credit_low floors and the previous probe did not; data.provider, remaining_usd, limit_usd, basis, below, floor_pct_usd, floor_usd; at most once per app, provider, and UTC hour). `user_key.rejected` is per user: the end user's own credential was rejected (data.reason `invalid`, `out_of_credit`, or `expired`; data.funding_rail, provider, external_id, feature_id, request_id, window_start); at most once per user and UTC hour. `platform.allowance_warning` and `platform.allowance_exhausted` are app-level and concern the tenant's Weirgate plan (see WebhookEvent.data).
          * @enum {string}
          */
-        WebhookEventType: "allowance.low" | "allowance.exhausted" | "rule.breached" | "provider_policy.changed" | "grant.created" | "grant.reversed" | "credits.adjusted" | "tier.expiring" | "tier.expired" | "purchase.granted" | "purchase.refunded";
+        WebhookEventType: "allowance.low" | "allowance.exhausted" | "rule.breached" | "provider_policy.changed" | "grant.created" | "grant.reversed" | "credits.adjusted" | "tier.expiring" | "tier.expired" | "purchase.granted" | "purchase.refunded" | "provider.credit_exhausted" | "provider.credit_restored" | "provider.credit_low" | "user_key.rejected" | "platform.allowance_warning" | "platform.allowance_exhausted";
         WebhookEvent: {
             id: string;
             type: components["schemas"]["WebhookEventType"];
             /** Format: date-time */
             created_at: string;
             app_id: components["schemas"]["AppId"];
+            /** @description The opaque Weirgate user id; null for app-level events (provider_policy.changed, provider.credit_*, platform.*). */
             user_id: string | null;
+            /** @description Per type. The platform.* events concern the tenant's Weirgate plan and are sent to every app of the tenant: platform.allowance_warning once per meter and UTC month at 80% on every plan (tier, meter calls|tokens, used, included, threshold_percent 80, period YYYY-MM, resets_at, will_block: true on Free, where 100% refuses live requests, false where overage is billed); platform.allowance_exhausted once per UTC month when a Free plan reaches its cap (tier, meter, used, included, period, resets_at, upgrade_required true). */
             data: components["schemas"]["GenericObject"];
         };
-        ProviderPolicyWithRevision: components["schemas"]["ProviderPolicyDocument"] & {
+        /** @description ProviderPolicyDocument plus its registry revision. */
+        ProviderPolicyWithRevision: {
             revision: number;
+            providers: components["schemas"]["ProviderPolicyProviders"];
         };
+        CatalogModel: {
+            upstream: components["schemas"]["Provider"];
+            /** @description The value a feature's `model` takes for this upstream. */
+            model: string;
+            provider: components["schemas"]["Provider"];
+            display_name: string;
+            /** @enum {string} */
+            modality: "chat" | "embedding" | "image" | "audio";
+            context_length: number | null;
+            /** @description USD per million input tokens; null when the source has no fixed price. */
+            input_usd_per_million: number | null;
+            /** @description USD per million output tokens; null when the source has no fixed price. */
+            output_usd_per_million: number | null;
+            /** @enum {string} */
+            price_basis: "list" | "openrouter_reference";
+            policy: {
+                developer: {
+                    /** @enum {string} */
+                    state: "allowed" | "warning" | "blocked";
+                    allowed: boolean;
+                    /** Format: date-time */
+                    grace_until: string | null;
+                    reason_code: components["schemas"]["CatalogPolicyReasonCode"];
+                    reason: components["schemas"]["CatalogPolicyReason"];
+                };
+                user: {
+                    /** @enum {string} */
+                    state: "allowed" | "warning" | "blocked";
+                    allowed: boolean;
+                    reason_code: components["schemas"]["CatalogPolicyReasonCode"];
+                    reason: components["schemas"]["CatalogPolicyReason"];
+                };
+            };
+        };
+        /** @description The provider policy's reason code for a key source that isn't `allowed` (open-ended, such as `raw_user_key_transfer_prohibited`); null when the state is `allowed` or the policy records no code. */
+        CatalogPolicyReasonCode: string | null;
+        /** @description One customer-readable sentence on why the key source can't use (or will soon lose) this model; null when the state is `allowed`. Display text: don't parse it. */
+        CatalogPolicyReason: string | null;
+        CatalogModelList: {
+            /** @constant */
+            object: "list";
+            /** @constant */
+            source: "openrouter";
+            /**
+             * Format: date-time
+             * @description When the prices were fetched from the source.
+             */
+            as_of: string | null;
+            /** @description True when the last refresh failed (or nothing is cached) and an older copy is served. */
+            stale: boolean;
+            policy_revision: number;
+            data: components["schemas"]["CatalogModel"][];
+        };
+        /** @description A provider slot's metadata, never its value. The credit fields come from the last health check (the `ops` monitor's or `POST .../health`) and are null where the provider can't say: every vendor except OpenRouter, a key that failed its check, or a slot not checked since it was saved. */
         ProviderKeyMetadata: {
             id: string;
             tenant_id: components["schemas"]["TenantId"];
@@ -2573,6 +3107,24 @@ export interface components {
             health: "unknown" | "healthy" | "unhealthy";
             /** Format: date-time */
             last_checked_at: string | null;
+            /** @description USD the key can still spend: the lower of the key's own limit remaining (when it has a limit) and the account's unspent credit (when the key may read it). Can be slightly negative when the provider let spend pass the limit. */
+            credit_remaining_usd: number | null;
+            /** @description The bound `credit_remaining_usd` is measured against (the key's limit, or the account's purchased credit). */
+            credit_limit_usd: number | null;
+            /**
+             * @description Which bound applies. `key_limit` is the key's own spending limit; `account` is the provider account's credit.
+             * @enum {string|null}
+             */
+            credit_basis: "key_limit" | "account" | null;
+            /** @description The key's spend in the current UTC month, as the provider reports it (all apps and rails that use this key). */
+            usage_this_month_usd: number | null;
+            /**
+             * Format: date-time
+             * @description When the credit was read.
+             */
+            credit_checked_at: string | null;
+            /** @description Informational, never an alert trigger: about how many whole days `credit_remaining_usd` lasts at the last 7 UTC days' developer-funded spend (today and the six days before) of the apps whose live features use this provider. Spend through the same key outside Weirgate isn't counted. Null when the credit is unknown, when that spend is zero, or when such an app also pays for another provider (its spend can't be split by provider). */
+            credit_runway_days: number | null;
             /** Format: date-time */
             revoked_at: string | null;
             /** Format: date-time */
@@ -2592,8 +3144,19 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
-        WebhookWithSecret: components["schemas"]["WebhookMetadata"] & {
-            signing_secret: string;
+        /** @description WebhookMetadata plus the signing secret, returned once on create and rotate. */
+        WebhookWithSecret: {
+            id: string;
+            app_id: components["schemas"]["AppId"];
+            /** Format: uri */
+            url: string;
+            event_types: components["schemas"]["WebhookEventType"][];
+            enabled: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            readonly signing_secret: string;
         };
         WebhookDelivery: {
             id: string;
@@ -2632,9 +3195,9 @@ export interface components {
             top_up_now: boolean;
             /**
              * Format: date-time
-             * @description When the assignment ends and the user returns to the default tier. Defaults from the tier's default_duration_days.
+             * @description When the assignment ends and the user returns to the default tier. Absent or null: the tier's default_duration_days if set, otherwise open-ended.
              */
-            expires_at?: string;
+            expires_at?: string | null;
         };
         UserTierRevertInput: {
             /** @default false */
@@ -2685,6 +3248,7 @@ export interface components {
              */
             unlimited_until: string | null;
         };
+        /** @description Sums over every settled request in the window for one group key (feature id, internal user id, model, funding rail, or refusal error type). p50_ms/p95_ms are percentile_cont over the server-side latency_ms of settled requests (two decimals, null with none); they exclude refused requests and client network time. */
         UsageRollup: {
             key: string;
             requests: number;
@@ -2696,14 +3260,234 @@ export interface components {
             completion_tokens: number;
             provider_cost_usd: number;
             user_cost_usd: number;
+            active_users: number;
+            p50_ms: number | null;
+            p95_ms: number | null;
         };
+        /** @description Window totals over every settled request (the same sums as a group, without a key) plus refusals: refused metered requests from the hourly counters, counted from the UTC hour that holds since. */
+        UsageTotals: {
+            requests: number;
+            developer_requests: number;
+            user_key_requests: number;
+            user_plan_requests: number;
+            units: number;
+            prompt_tokens: number;
+            completion_tokens: number;
+            provider_cost_usd: number;
+            user_cost_usd: number;
+            active_users: number;
+            p50_ms: number | null;
+            p95_ms: number | null;
+            refusals: number;
+        };
+        UsageSeriesPoint: {
+            /** Format: date-time */
+            bucket_start: string;
+            requests: number;
+            units: number;
+            provider_cost_usd: number;
+            user_cost_usd: number;
+            active_users: number;
+            refusals: number;
+        };
+        /** @description totals, groups, and series cover every settled request in the window. limit caps the number of groups (largest by requests first); pagination.truncated says groups were left out. window_events equals totals.requests. */
         UsageRollupPage: {
             /** @enum {string} */
-            group_by: "feature" | "user";
+            group_by: "feature" | "user" | "model" | "funding_rail" | "refusal_code";
             window_events: number;
             window: components["schemas"]["QueryWindow"];
             pagination: components["schemas"]["Pagination"];
             groups: components["schemas"]["UsageRollup"][];
+            totals: components["schemas"]["UsageTotals"];
+            /**
+             * Format: date-time
+             * @description Start of the oldest refusal counter still kept (35-day retention; counting began 2026-10-11). Refusals before it are unknown, not zero; null when none were counted.
+             */
+            refusals_since: string | null;
+            /** @enum {string} */
+            bucket?: "day" | "hour";
+            series?: components["schemas"]["UsageSeriesPoint"][];
+            margin?: components["schemas"]["UsageMargin"];
+        };
+        FailureRow: {
+            id: string;
+            /**
+             * @description refusal is a typed 4xx refusal; error is a 5xx request error.
+             * @enum {string}
+             */
+            kind: "refusal" | "error";
+            /** Format: date-time */
+            occurred_at: string;
+            request_id: components["schemas"]["RequestId"];
+            error_type: components["schemas"]["ErrorType"];
+            status: number | null;
+            /** @description The requested feature when the app configures it. */
+            feature_id: string | null;
+            /** @description The rail named by the refusal; null when the error names none. */
+            funding_rail: components["schemas"]["FundingRail"] | null;
+            /** @description The refused end user's opaque Weirgate user id (never the external id), as on usage events. Null for request errors and for refusals recorded before 2026-10-18. */
+            user_id: string | null;
+        };
+        UserStatusReason: {
+            /** @description A current condition (out_of_allowance, rate_limited, abuse_blocked) or the error type of a recent refusal. */
+            type: string;
+            /** @description True while it blocks the user. Current conditions are active while they hold. A recent refusal of another type (for example user_provider_key_invalid or developer_credit_exhausted) can't be re-checked without calling the provider, so only the newest such refusal is active, and only when nothing succeeded for the user since. */
+            active: boolean;
+            detail: components["schemas"]["GenericObject"];
+            /** Format: date-time */
+            since: string | null;
+            /**
+             * Format: date-time
+             * @description When the condition ends on its own: the velocity window end, when the oldest in-flight reservation stops counting, or the next monthly allowance. Null when unknown.
+             */
+            until: string | null;
+            /** @description The refusal's request id (Request trace). */
+            request_id: string | null;
+        };
+        UserStatus: {
+            /**
+             * @description blocked when any reason is active.
+             * @enum {string}
+             */
+            state: "ok" | "blocked";
+            /** @description Active conditions first, then the user's refusals of the last 24 hours (newest 20), newest first. */
+            reasons: components["schemas"]["UserStatusReason"][];
+            /** Format: date-time */
+            checked_at: string;
+        };
+        /** @description Present only with include=margin. Cost per unit is the developer-rail provider cost divided by the units those requests debited, over every settled request in the usage window; requests that debited no units (unlimited tiers) are reported as unmetered_cost_usd instead. Revenue per unit is the developer's proceeds per purchased credit: observed (net proceeds ÷ units of unrefunded priced consumable purchases, live, trailing 90 days), else list_price (Σ price_usd × proceeds ÷ Σ units across priced consumable products), else unpriced (null). It applies to purchased credits only: user-funded requests carry no developer cost, and credits granted from allowance, welcome, or manual grants carry cost without revenue (credits_granted reports them). */
+        UsageMargin: {
+            revenue_per_unit_usd: number | null;
+            /** @enum {string} */
+            revenue_basis: "observed" | "list_price" | "unpriced";
+            revenue_window: {
+                /** Format: date-time */
+                since: string;
+                /** Format: date-time */
+                until: string;
+                /** @constant */
+                environment: "live";
+                purchases: number;
+                units: number;
+                proceeds_usd: number;
+                truncated: boolean;
+            };
+            totals: components["schemas"]["UnitMargin"];
+            by_feature: (components["schemas"]["UnitMargin"] & {
+                feature_id: components["schemas"]["FeatureId"];
+            })[];
+            by_feature_tier: (components["schemas"]["UnitMargin"] & {
+                feature_id: components["schemas"]["FeatureId"];
+                /** @description Tier snapshot at settlement; null for pre-migration rows. */
+                tier: string | null;
+            })[];
+            /** @description Units of unreversed grants created in the usage window, by source. */
+            credits_granted: {
+                purchased: number;
+                allowance: number;
+                welcome: number;
+                other: number;
+            };
+        };
+        UnitMargin: {
+            requests: number;
+            developer_requests: number;
+            developer_units: number;
+            developer_cost_usd: number;
+            unmetered_cost_usd: number;
+            cost_known_requests: number;
+            user_funded_requests: number;
+            user_funded_units: number;
+            cost_per_unit_usd: number | null;
+            revenue_per_unit_usd: number | null;
+            margin_per_unit_usd: number | null;
+            /** @description Margin per unit ÷ revenue per unit × 100. */
+            margin_pct: number | null;
+        };
+        MoneyTotals: {
+            count: number;
+            units: number;
+            /** @description Customer price paid; null when the product has no price_usd. */
+            gross_usd: number | null;
+            /** @description Developer proceeds after the store's commission. */
+            proceeds_usd: number | null;
+        };
+        Revenue: {
+            app_id: components["schemas"]["AppId"];
+            /** @enum {string} */
+            environment: "live" | "test" | "all";
+            window: components["schemas"]["QueryWindow"];
+            /** @constant */
+            currency: "USD";
+            /**
+             * @description Prices are the ones configured now
+             * @constant
+             */
+            price_basis: "current";
+            /** @enum {string|null} */
+            commission: "standard" | "small_business" | null;
+            /** @description True when the window held more than 10000 purchases and only the newest were summed. */
+            truncated: boolean;
+            products: {
+                product_id: string;
+                /** @enum {string} */
+                kind: "consumable" | "subscription";
+                price_usd: number | null;
+                proceeds_pct: number;
+                purchases: components["schemas"]["MoneyTotals"];
+                refunds: components["schemas"]["MoneyTotals"];
+                net: components["schemas"]["MoneyTotals"];
+            }[];
+            totals: {
+                purchases: components["schemas"]["MoneyTotals"];
+                refunds: components["schemas"]["MoneyTotals"];
+                net: components["schemas"]["MoneyTotals"];
+                unpriced_purchases: number;
+            };
+            by_day: {
+                /** Format: date */
+                date: string;
+                purchases: number;
+                units: number;
+                gross_usd: number | null;
+                proceeds_usd: number | null;
+            }[];
+            /** @description Configured products that have no price_usd. */
+            products_without_price: string[];
+        };
+        CreditLiability: {
+            app_id: components["schemas"]["AppId"];
+            /** Format: date-time */
+            as_of: string;
+            users_with_balance: number;
+            units: {
+                total: number;
+                purchased: number;
+                free: number;
+            };
+            /** @constant */
+            allocation: "free_credits_spent_first";
+            cost_per_unit_usd: number | null;
+            /** @enum {string} */
+            cost_basis: "trailing_developer_cost" | "no_recent_usage";
+            cost_window: {
+                /** Format: date-time */
+                since: string;
+                /** Format: date-time */
+                until: string;
+                developer_requests: number;
+                developer_units: number;
+                developer_cost_usd: number;
+            };
+            usd: {
+                total: number;
+                purchased: number;
+                free: number;
+            } | null;
+            negative_balances: {
+                users: number;
+                units: number;
+            };
         };
         QueryWindow: {
             /** Format: date-time */
@@ -2746,6 +3530,21 @@ export interface components {
                     required_users: number;
                     observed_users: number;
                 } | null;
+                /** @description Present with sample=small; true below the 20-user minimum. */
+                insufficient_evidence?: boolean;
+                /** @description Present with sample=small; null when the minimum is met. */
+                small_sample?: {
+                    mean_usd: number;
+                    min_usd: number;
+                    max_usd: number;
+                    users: {
+                        /** @description Immutable internal user ID */
+                        user_id: string;
+                        requests: number;
+                        provider_cost_known_requests: number;
+                        provider_cost_usd: number;
+                    }[];
+                } | null;
             }[];
         };
         VelocityLimit: {
@@ -2755,18 +3554,21 @@ export interface components {
             /** Format: date-time */
             expires_at?: string;
         } | unknown | unknown;
-        RulesetDocument: {
-            velocity?: {
-                tiers?: {
-                    [key: string]: components["schemas"]["VelocityLimit"];
-                };
-                user_overrides?: {
-                    [key: string]: components["schemas"]["VelocityLimit"];
-                };
+        RulesetVelocity: {
+            tiers?: {
+                [key: string]: components["schemas"]["VelocityLimit"];
+            };
+            user_overrides?: {
+                [key: string]: components["schemas"]["VelocityLimit"];
             };
         };
-        Ruleset: components["schemas"]["RulesetDocument"] & {
+        RulesetDocument: {
+            velocity?: components["schemas"]["RulesetVelocity"];
+        };
+        /** @description RulesetDocument plus the app-local revision the rules proposal endpoint advances. */
+        Ruleset: {
             revision: number;
+            velocity?: components["schemas"]["RulesetVelocity"];
         };
         RulesPreview: {
             preview_id: string;
@@ -2793,7 +3595,16 @@ export interface components {
             /** Format: date-time */
             expires_at: string;
         };
-        RulesProposalCreated: components["schemas"]["ConfigProposalCreated"] & {
+        /** @description ConfigProposalCreated plus the preview it is bound to. */
+        RulesProposalCreated: {
+            proposal_id: components["schemas"]["ProposalId"];
+            tenant_id: components["schemas"]["TenantId"];
+            base_revision: number;
+            /** @constant */
+            status: "pending";
+            /** Format: date-time */
+            expires_at: string;
+            warnings?: string[];
             preview_id: string;
             app_id: components["schemas"]["AppId"];
             ruleset_revision: number;
@@ -2862,16 +3673,127 @@ export interface components {
             allowance_available: number;
             /** @description Credits that never expire: purchases, welcome and manual grants, carry-tier allowance, and signed adjustments. Negative after a refund or clawback that exceeded them. */
             purchased_available: number;
+            /**
+             * Format: date-time
+             * @description When Weirgate first saw the user.
+             */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description Latest settled request; null when none.
+             */
+            last_active_at: string | null;
+            /** @description Units settled (spent) */
+            spend_units: number;
+            /** @description A consumable purchase that is not refunded, or an active subscription, in the live environment (test for a test-environment key). */
+            paying: boolean;
         };
-        /** @description Platform reads return tenants plus a revision map; tenant reads return one visible tenant plus revision. */
+        /** @description The users listing's filters, with typed values. */
+        BulkUserFilter: {
+            q?: string;
+            tier?: string;
+            balance_lt?: number;
+            /** @enum {boolean} */
+            out_of_allowance?: true;
+            /** Format: date-time */
+            active_since?: string;
+            /** Format: date-time */
+            inactive_since?: string;
+            paying?: boolean;
+        };
+        BulkGrantPreviewInput: {
+            /** @constant */
+            dry_run: true;
+            filter?: components["schemas"]["BulkUserFilter"];
+            /** @description next_cursor from the previous preview of the same segment. */
+            cursor?: string;
+            /** @description Per user. Positive grants; negative deducts. */
+            units: number;
+            /** @description Kept in the audit log; the adjustment reason for negative units. allowance_expiry is reserved. */
+            reason: string;
+            /** @description Defaults to bulk. */
+            source?: string;
+            /** @description Negative units only. Defaults to true for reason clawback */
+            allow_negative?: boolean;
+        };
+        BulkGrantApplyInput: {
+            preview_token: string;
+            /** @constant */
+            dry_run?: false;
+        };
+        BulkGrantPreview: {
+            /** @description Null when no user matched. */
+            preview_token: string | null;
+            /** Format: date-time */
+            expires_at: string | null;
+            /** @enum {string} */
+            kind: "grant" | "adjustment";
+            units: number;
+            reason: string;
+            source: string;
+            allow_negative: boolean;
+            filter: components["schemas"]["BulkUserFilter"];
+            /** @description Users matching the filter, across every call, at most 10,000. */
+            matched: number;
+            /** @description true when more than 10,000 users match; matched is then 10,000. */
+            matched_capped: boolean;
+            /** @description Users this preview covers. */
+            count: number;
+            /** @description Preview again with this cursor for the rest of the segment. */
+            next_cursor: string | null;
+            /** @description Deductions the current balance would refuse with insufficient_balance. */
+            would_refuse: number;
+            /** @description units times count. */
+            total_units: number;
+            sample: {
+                id: string;
+                external_id: string | null;
+                tier: string;
+                available: number;
+            }[];
+        };
+        BulkGrantResult: {
+            /** @description The grant.bulk_applied audit row. */
+            bulk_id: string;
+            preview_token: string;
+            /** @description True when this key and token were already applied. */
+            idempotent: boolean;
+            /** @enum {string} */
+            kind: "grant" | "adjustment";
+            units: number;
+            reason: string;
+            source: string;
+            count: number;
+            created: number;
+            replayed: number;
+            insufficient_balance: number;
+            /** @description The derived key already held a different write. */
+            conflict: number;
+            /** @description Users deleted since the preview. */
+            user_unavailable: number;
+            results: {
+                user_id: string;
+                external_id: string | null;
+                /** @enum {string} */
+                status: "created" | "replayed" | "insufficient_balance" | "conflict" | "user_unavailable";
+                grant_id?: string;
+                adjustment_id?: string;
+                /** @description Balance after this call. */
+                available?: number;
+            }[];
+        };
+        /** @description A platform read without tenant_id returns tenants plus a revision map; a tenant read, or a platform read naming tenant_id, returns one tenant plus its revision. */
         ConfigRead: {
             tenants: components["schemas"]["TenantConfig"][];
             revisions: {
                 [key: string]: number;
             };
-        } | (components["schemas"]["TenantConfig"] & {
+        } | {
+            tenant_id: components["schemas"]["TenantId"];
+            name?: string;
+            apps: components["schemas"]["AppConfig"][];
             revision: number;
-        });
+        };
         ConfigApplied: {
             /** @constant */
             applied: true;
@@ -3011,6 +3933,8 @@ export interface components {
             money: components["schemas"]["GenericObject"] | null;
             usage_event: components["schemas"]["UsageEvent"] | null;
             client_telemetry: components["schemas"]["ClientTelemetryEvent"] | null;
+            /** @description The kept refusal or request error for this request id, if any. */
+            failure: components["schemas"]["FailureRow"] | null;
         };
         IntegrationSnippet: {
             /** @constant */
@@ -3039,6 +3963,10 @@ export interface components {
                 limit: number;
                 returned: number;
                 truncated: boolean;
+                /** @description Pass as cursor for the next older page; null on the last page. */
+                next_cursor: string | null;
+                /** @description Only with include=total. Events matching the filters, ignoring cursor and limit. */
+                total?: number;
             };
         };
     };
@@ -3147,6 +4075,17 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["ProviderPolicyWithRevision"];
+            };
+        };
+        /** @description Model catalog with list prices */
+        CatalogModelListOk: {
+            headers: {
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["CatalogModelList"];
             };
         };
         /** @description Provider-key metadata; plaintext and ciphertext are never returned */
@@ -3389,6 +4328,28 @@ export interface components {
                 "application/json": components["schemas"]["UsageRollupPage"];
             };
         };
+        /** @description Store revenue by product */
+        RevenueOk: {
+            headers: {
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Revenue"];
+            };
+        };
+        /** @description Outstanding credit liability */
+        CreditLiabilityOk: {
+            headers: {
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["CreditLiability"];
+            };
+        };
         /** @description Closed-window pricing evidence */
         PricingInsightsOk: {
             headers: {
@@ -3437,11 +4398,17 @@ export interface components {
                 "application/json": components["schemas"]["RulesProposalCreated"];
             };
         };
-        /** @description Active app users */
+        /** @description Active app users, as JSON or (format=csv) CSV */
         UserListOk: {
             headers: {
                 "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
                 "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                /** @description CSV only. Users matching the filters, at most 10,000. */
+                "X-Weirgate-Total-Count"?: number;
+                /** @description CSV only. true when more than 10,000 users match, so X-Weirgate-Total-Count is the cap. */
+                "X-Weirgate-Total-Capped"?: "true" | "false";
+                /** @description CSV only. true when more than 10,000 rows matched from the cursor on. */
+                "X-Weirgate-Truncated"?: "true" | "false";
                 [name: string]: unknown;
             };
             content: {
@@ -3452,8 +4419,24 @@ export interface components {
                         returned: number;
                         truncated: boolean;
                         next_cursor: string | null;
+                        /** @description Users matching the filters, ignoring cursor and limit, at most 10,000. */
+                        total: number;
+                        /** @description true when more than 10,000 users match; total is then 10,000. */
+                        total_capped: boolean;
                     };
                 };
+                "text/csv": string;
+            };
+        };
+        /** @description A bulk grant preview (dry_run) or the per-user results of applying one */
+        BulkGrantOk: {
+            headers: {
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["BulkGrantPreview"] | components["schemas"]["BulkGrantResult"];
             };
         };
         /** @description Verified store purchases, newest first */
@@ -3507,6 +4490,7 @@ export interface components {
             content: {
                 "application/json": {
                     user: components["schemas"]["UserRow"];
+                    status: components["schemas"]["UserStatus"];
                     balance: components["schemas"]["UserBalance"];
                     grants: components["schemas"]["GrantRow"][];
                     adjustments: components["schemas"]["CreditAdjustmentRow"][];
@@ -3520,6 +4504,17 @@ export interface components {
                     recent_events: components["schemas"]["UsageEvent"][];
                     recent_events_pagination: components["schemas"]["Pagination"];
                 };
+            };
+        };
+        /** @description Whether the user is blocked now, and why */
+        UserStatusOk: {
+            headers: {
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["UserStatus"];
             };
         };
         /** @description DSAR export */
@@ -3762,6 +4757,25 @@ export interface components {
                 "application/json": components["schemas"]["Readiness"];
             };
         };
+        /** @description Recent refused and failed requests, newest first */
+        FailureListOk: {
+            headers: {
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: components["schemas"]["FailureRow"][];
+                    pagination: {
+                        limit: number;
+                        returned: number;
+                        truncated: boolean;
+                        next_cursor: string | null;
+                    };
+                };
+            };
+        };
         /** @description Correlated request trace */
         RequestTraceOk: {
             headers: {
@@ -3866,6 +4880,20 @@ export interface components {
             };
             content?: never;
         };
+        /** @description rate_limited (a velocity rule; detail.retry_after_ms) or budget_exhausted: the app's developer-funded spend reached its budget for the UTC month or day (detail.period month|day, cap_usd, spent_usd, resets_at). budget_exhausted is returned only on the developer-funded rail; requests a user pays for are never refused by the developer's budget. Or platform_allowance_exhausted: the tenant's Weirgate plan (Free) used its included calls or tokens for the UTC month, so every live request of every app is refused on every rail until the reset or an upgrade (detail.tier, meter calls|tokens, used, included, calls_used, calls_included, tokens_used, tokens_included, period YYYY-MM, resets_at, upgrade_required true). It is not the end user's doing: show a temporary-unavailability message, not a purchase prompt. Retry-After is the seconds until the reset. */
+        TooManyRequestsDataPlane: {
+            headers: {
+                "X-Weirgate-Error-Type": components["headers"]["ErrorType"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                /** @description Seconds until the budget period (budget_exhausted) or the platform plan's UTC month (platform_allowance_exhausted) resets. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorEnvelope"];
+            };
+        };
         TelemetryRequestUnavailable: {
             headers: {
                 [name: string]: unknown;
@@ -3908,7 +4936,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorEnvelope"];
             };
         };
-        /** @description user-provider-key or output-contract validation failure */
+        /** @description user_provider_key_required, user_provider_key_invalid (the end user's own provider key was rejected: detail.rail user_key, detail.reason `invalid` for a key the provider refused or `out_of_credit` for a key whose account is empty, detail.provider), or an output-contract validation failure */
         UnprocessableDataPlane: {
             headers: {
                 "X-Weirgate-Error-Type": components["headers"]["ErrorType"];
@@ -3926,6 +4954,20 @@ export interface components {
                 "X-Weirgate-Error-Type": components["headers"]["ErrorType"];
                 "X-Weirgate-Request-Id": components["headers"]["RequestId"];
                 "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorEnvelope"];
+            };
+        };
+        /** @description developer_credit_exhausted: the app owner's provider key is out of credit (provider 402 on the developer rail; detail.rail developer, detail.reason credit_exhausted, detail.provider, detail.next_rail). It is not the end user's fault, so apps must not show a paywall; a feature whose funding.order lists a user rail after developer falls through to it inside the request. provider_rate_limited: the provider throttled the request (upstream 429; detail.rail, detail.provider), with the provider's Retry-After when it sent one. Both are retryable. */
+        UnavailableDataPlane: {
+            headers: {
+                "X-Weirgate-Error-Type": components["headers"]["ErrorType"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                /** @description The provider's Retry-After (delta-seconds or an HTTP date), on provider_rate_limited when sent. */
+                "Retry-After"?: string;
                 [name: string]: unknown;
             };
             content: {
@@ -4040,6 +5082,12 @@ export interface components {
             };
             content?: never;
         };
+        ErrorBudgetExhausted: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
         ErrorTelemetryRequestUnavailable: {
             headers: {
                 [name: string]: unknown;
@@ -4047,6 +5095,18 @@ export interface components {
             content?: never;
         };
         ErrorProviderUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
+        ErrorDeveloperCreditExhausted: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
+        ErrorProviderRateLimited: {
             headers: {
                 [name: string]: unknown;
             };
@@ -4101,6 +5161,12 @@ export interface components {
             content?: never;
         };
         ErrorUserCredentialExpired: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
+        ErrorPlatformAllowanceExhausted: {
             headers: {
                 [name: string]: unknown;
             };
@@ -4174,7 +5240,28 @@ export interface components {
         TenantIdQuery: components["schemas"]["TenantId"];
         /** @description Required to bind app-scoped provider metadata reads and probes. */
         AppIdQuery: components["schemas"]["AppId"];
+        /** @description Prefix of the external ID (case-sensitive). A full user ID (UUID, any case) also matches that user exactly; partial user IDs do not match. */
+        UserFilterQ: string;
+        /** @description The user's active tier. */
+        UserFilterTier: string;
+        /** @description available (allowance_available + purchased_available) strictly below this number; 0 finds negative balances. */
+        UserFilterBalanceLt: number;
+        /** @description Only true. Users on a tier with a monthly allowance that is not unlimited, with nothing left to spend and no debt (available <= 0 and purchased_available >= 0). */
+        UserFilterOutOfAllowance: true;
+        /** @description Latest settled request at or after this instant. */
+        UserFilterActiveSince: string;
+        /** @description No settled request at or after this instant, including users who never made one. */
+        UserFilterInactiveSince: string;
+        /** @description true keeps only paying users; false keeps only non-paying users. */
+        UserFilterPaying: boolean;
+        /** @description Page size; a larger value is invalid_request. */
         LimitQuery: number;
+        /** @description Number of results; a larger value is invalid_request. */
+        DocsSearchLimitQuery: number;
+        /** @description Number of groups; a larger value is invalid_request. */
+        UsageLimitQuery: number;
+        /** @description Page size; a larger value is invalid_request. */
+        AuditLimitQuery: number;
         SinceQuery: string;
         UntilQuery: string;
         AppIdPath: components["schemas"]["AppId"];
@@ -4304,11 +5391,11 @@ export interface components {
         WeirgateApiVersion: "2026-07-18";
         /** @description Correlation id with UUIDv4 randomness. */
         RequestId: components["schemas"]["RequestId"];
-        /** @description Available units after pending reservations. */
+        /** @description Available units after pending reservations (units can be fractional). */
         CreditsRemaining: number;
         /** @description The rail that paid this request, e.g. `developer`, `user_key`, or `user_plan; provider=openai_chatgpt`. */
         FundingRail: string;
-        /** @description Present when a rail refused and a later rail funded the request inside this call: `<refused rail>; reason=<refusal reason>[; disable]`. `disable` means the SDK should mark that rail unavailable until the user re-consents (on_refusal next_and_disable). */
+        /** @description Present when a rail refused and a later rail funded the request inside this call: `<refused rail>; reason=<refusal reason>[; disable]` (for example `developer; reason=credit_exhausted` when the app's provider key ran out of credit). `disable` means the SDK should mark that rail unavailable until the user re-consents (on_refusal next_and_disable). */
         FundingFallback: string;
         /** @description Stable enumerable error discriminator; never parse message strings. */
         ErrorType: components["schemas"]["ErrorType"];
@@ -4380,9 +5467,10 @@ export interface operations {
             403: components["responses"]["ForbiddenDataPlane"];
             404: components["responses"]["NotFoundDataPlane"];
             422: components["responses"]["UnprocessableDataPlane"];
-            429: components["responses"]["RateLimited"];
+            429: components["responses"]["TooManyRequestsDataPlane"];
             500: components["responses"]["Internal"];
             502: components["responses"]["UpstreamFailure"];
+            503: components["responses"]["UnavailableDataPlane"];
         };
     };
     createEmbedding: {
@@ -4425,9 +5513,10 @@ export interface operations {
             403: components["responses"]["ForbiddenDataPlane"];
             404: components["responses"]["NotFoundDataPlane"];
             422: components["responses"]["UnprocessableDataPlane"];
-            429: components["responses"]["RateLimited"];
+            429: components["responses"]["TooManyRequestsDataPlane"];
             500: components["responses"]["Internal"];
             502: components["responses"]["UpstreamFailure"];
+            503: components["responses"]["UnavailableDataPlane"];
         };
     };
     listFeatures: {
@@ -4636,6 +5725,217 @@ export interface operations {
             400: components["responses"]["ErrorPurchaseInvalidSignature"];
             500: components["responses"]["Internal"];
             502: components["responses"]["ErrorProviderUnavailable"];
+        };
+    };
+    getAlertRecipientConfirmPage: {
+        parameters: {
+            query?: {
+                /** @description The token from the email link. */
+                token?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The confirmation page */
+            200: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description The link has no token */
+            404: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    /** @description The typed error this page reports. */
+                    "X-Weirgate-Error-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+        };
+    };
+    confirmAlertRecipient: {
+        parameters: {
+            query?: {
+                /** @description The token from the email link. */
+                token?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/x-www-form-urlencoded": {
+                    token?: string;
+                    /** @enum {string} */
+                    "List-Unsubscribe"?: "One-Click";
+                };
+            };
+        };
+        responses: {
+            /** @description Confirmed */
+            200: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description Unknown or already used token */
+            404: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    /** @description The typed error this page reports. */
+                    "X-Weirgate-Error-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description The link expired; the team can resend it */
+            410: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    /** @description The typed error this page reports. */
+                    "X-Weirgate-Error-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description Too many attempts from this client */
+            429: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    /** @description The typed error this page reports. */
+                    "X-Weirgate-Error-Type"?: string;
+                    /** @description Seconds until this client may try again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+        };
+    };
+    getAlertRecipientUnsubscribePage: {
+        parameters: {
+            query?: {
+                /** @description The token from the email link. */
+                token?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The unsubscribe page */
+            200: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description The link has no token */
+            404: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    /** @description The typed error this page reports. */
+                    "X-Weirgate-Error-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+        };
+    };
+    unsubscribeAlertRecipient: {
+        parameters: {
+            query?: {
+                /** @description The token from the email link. */
+                token?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/x-www-form-urlencoded": {
+                    token?: string;
+                    /** @enum {string} */
+                    "List-Unsubscribe"?: "One-Click";
+                };
+            };
+        };
+        responses: {
+            /** @description Unsubscribed */
+            200: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description The token is not valid */
+            404: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    /** @description The typed error this page reports. */
+                    "X-Weirgate-Error-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description Too many attempts from this client */
+            429: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    /** @description The typed error this page reports. */
+                    "X-Weirgate-Error-Type"?: string;
+                    /** @description Seconds until this client may try again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
         };
     };
     ingestClientTelemetry: {
@@ -5063,7 +6363,8 @@ export interface operations {
             query: {
                 query: string;
                 section?: string;
-                limit?: components["parameters"]["LimitQuery"];
+                /** @description Number of results; a larger value is invalid_request. */
+                limit?: components["parameters"]["DocsSearchLimitQuery"];
             };
             header?: never;
             path?: never;
@@ -5132,6 +6433,24 @@ export interface operations {
         requestBody: components["requestBodies"]["ProviderPolicyBody"];
         responses: {
             200: components["responses"]["ProviderPolicyOk"];
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+        };
+    };
+    listCatalogModels: {
+        parameters: {
+            query?: {
+                upstream?: components["schemas"]["Provider"];
+                modality?: "chat" | "embedding" | "image" | "audio";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["CatalogModelListOk"];
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["InvalidToken"];
             403: components["responses"]["InsufficientScope"];
@@ -5374,9 +6693,12 @@ export interface operations {
     listWebhookProposals: {
         parameters: {
             query?: {
+                /** @description Required for platform-key access; tenant keys are pinned to their own tenant. */
+                tenant_id?: components["parameters"]["TenantIdQuery"];
                 app_id?: components["schemas"]["AppId"];
                 status?: "pending" | "applied" | "cancelled" | "expired";
                 cursor?: components["schemas"]["ProposalId"];
+                /** @description Page size; a larger value is invalid_request. */
                 limit?: components["parameters"]["LimitQuery"];
             };
             header?: never;
@@ -5389,6 +6711,7 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["InvalidToken"];
             403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
         };
     };
     getWebhookProposal: {
@@ -5492,6 +6815,7 @@ export interface operations {
     listWebhookDeliveries: {
         parameters: {
             query?: {
+                /** @description Page size; a larger value is invalid_request. */
                 limit?: components["parameters"]["LimitQuery"];
             };
             header?: never;
@@ -5717,8 +7041,14 @@ export interface operations {
             query?: {
                 since?: components["parameters"]["SinceQuery"];
                 until?: components["parameters"]["UntilQuery"];
-                limit?: components["parameters"]["LimitQuery"];
-                group_by?: "feature" | "user";
+                /** @description Number of groups; a larger value is invalid_request. */
+                limit?: components["parameters"]["UsageLimitQuery"];
+                /** @description refusal_code groups refused requests by error type from the hourly refusal counters; its groups carry only requests (other sums are 0, latency null). */
+                group_by?: "feature" | "user" | "model" | "funding_rail" | "refusal_code";
+                /** @description Adds a zero-filled series of UTC day or hour buckets from the bucket holding since up to until. Requires since and until; hour allows at most 14 days and day at most 400 days, otherwise invalid_request. */
+                bucket?: "day" | "hour";
+                /** @description margin adds unit economics (UsageMargin) over every settled request in the window. */
+                include?: "margin";
             };
             header?: never;
             path: {
@@ -5735,11 +7065,37 @@ export interface operations {
             404: components["responses"]["ResourceNotFound"];
         };
     };
+    listFailures: {
+        parameters: {
+            query?: {
+                since?: components["parameters"]["SinceQuery"];
+                until?: components["parameters"]["UntilQuery"];
+                /** @description next_cursor of the previous page. */
+                cursor?: string;
+                /** @description Page size; a larger value is invalid_request. */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                app_id: components["parameters"]["AppIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["FailureListOk"];
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+        };
+    };
     getPricingInsights: {
         parameters: {
             query?: {
                 since?: components["parameters"]["SinceQuery"];
                 until?: components["parameters"]["UntilQuery"];
+                sample?: "small";
             };
             header?: never;
             path: {
@@ -5813,7 +7169,27 @@ export interface operations {
         parameters: {
             query?: {
                 cursor?: string;
+                /** @description Page size; a larger value is invalid_request. */
                 limit?: components["parameters"]["LimitQuery"];
+                /** @description Prefix of the external ID (case-sensitive). A full user ID (UUID, any case) also matches that user exactly; partial user IDs do not match. */
+                q?: components["parameters"]["UserFilterQ"];
+                /** @description The user's active tier. */
+                tier?: components["parameters"]["UserFilterTier"];
+                /** @description available (allowance_available + purchased_available) strictly below this number; 0 finds negative balances. */
+                balance_lt?: components["parameters"]["UserFilterBalanceLt"];
+                /** @description Only true. Users on a tier with a monthly allowance that is not unlimited, with nothing left to spend and no debt (available <= 0 and purchased_available >= 0). */
+                out_of_allowance?: components["parameters"]["UserFilterOutOfAllowance"];
+                /** @description Latest settled request at or after this instant. */
+                active_since?: components["parameters"]["UserFilterActiveSince"];
+                /** @description No settled request at or after this instant, including users who never made one. */
+                inactive_since?: components["parameters"]["UserFilterInactiveSince"];
+                /** @description true keeps only paying users; false keeps only non-paying users. */
+                paying?: components["parameters"]["UserFilterPaying"];
+                sort?: "id" | "spend" | "last_active" | "balance" | "created";
+                /** @description Defaults to asc for sort id and desc for every other sort. */
+                direction?: "asc" | "desc";
+                /** @description csv returns the filtered rows as text/csv instead of JSON; limit is ignored. */
+                format?: "csv";
             };
             header?: never;
             path: {
@@ -5830,12 +7206,41 @@ export interface operations {
             404: components["responses"]["ResourceNotFound"];
         };
     };
+    bulkGrant: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required to apply; ignored for a preview. */
+                "X-Idempotency-Key"?: string;
+            };
+            path: {
+                app_id: components["parameters"]["AppIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkGrantPreviewInput"] | components["schemas"]["BulkGrantApplyInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["BulkGrantOk"];
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+            409: components["responses"]["ResourceConflict"];
+        };
+    };
     listPurchases: {
         parameters: {
             query?: {
+                since?: components["parameters"]["SinceQuery"];
+                until?: components["parameters"]["UntilQuery"];
                 environment?: "test" | "live";
                 external_id?: string;
                 cursor?: string;
+                /** @description Page size; a larger value is invalid_request. */
                 limit?: components["parameters"]["LimitQuery"];
             };
             header?: never;
@@ -5848,6 +7253,45 @@ export interface operations {
         responses: {
             200: components["responses"]["PurchaseListOk"];
             400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+        };
+    };
+    getRevenue: {
+        parameters: {
+            query?: {
+                since?: components["parameters"]["SinceQuery"];
+                until?: components["parameters"]["UntilQuery"];
+                environment?: "live" | "test" | "all";
+            };
+            header?: never;
+            path: {
+                app_id: components["parameters"]["AppIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["RevenueOk"];
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+        };
+    };
+    getCreditLiability: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                app_id: components["parameters"]["AppIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["CreditLiabilityOk"];
             401: components["responses"]["InvalidToken"];
             403: components["responses"]["InsufficientScope"];
             404: components["responses"]["ResourceNotFound"];
@@ -5946,6 +7390,24 @@ export interface operations {
             404: components["responses"]["ResourceNotFound"];
         };
     };
+    getUserStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                app_id: components["parameters"]["AppIdPath"];
+                external_id: components["parameters"]["ExternalIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["UserStatusOk"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+        };
+    };
     exportUser: {
         parameters: {
             query?: never;
@@ -5966,7 +7428,10 @@ export interface operations {
     };
     getConfig: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Required for platform-key access; tenant keys are pinned to their own tenant. */
+                tenant_id?: components["parameters"]["TenantIdQuery"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -6002,10 +7467,13 @@ export interface operations {
     listConfigProposals: {
         parameters: {
             query?: {
+                /** @description Required for platform-key access; tenant keys are pinned to their own tenant. */
+                tenant_id?: components["parameters"]["TenantIdQuery"];
                 app_id?: components["schemas"]["AppId"];
                 kind?: "config" | "rules";
                 status?: "pending" | "applied" | "cancelled" | "expired";
                 cursor?: components["schemas"]["ProposalId"];
+                /** @description Page size; a larger value is invalid_request. */
                 limit?: components["parameters"]["LimitQuery"];
             };
             header?: never;
@@ -6018,6 +7486,7 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["InvalidToken"];
             403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
         };
     };
     createConfigProposal: {
@@ -6133,12 +7602,142 @@ export interface operations {
             404: components["responses"]["ResourceNotFound"];
         };
     };
+    getAlertState: {
+        parameters: {
+            query?: {
+                /** @description Required for platform-key access; tenant keys are pinned to their own tenant. */
+                tenant_id?: components["parameters"]["TenantIdQuery"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Effective alert settings and last sends */
+            200: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertState"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+        };
+    };
+    resendAlertRecipientConfirmation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    tenant_id?: components["schemas"]["TenantId"];
+                    /** Format: email */
+                    address: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Confirmation email sent */
+            200: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRecipientResendResult"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+            429: components["responses"]["RateLimited"];
+            502: components["responses"]["ErrorProviderUnavailable"];
+        };
+    };
+    sendTestAlert: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    tenant_id?: components["schemas"]["TenantId"];
+                };
+            };
+        };
+        responses: {
+            /** @description Test alert sent */
+            200: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertTestResult"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    getAppBudget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                app_id: components["parameters"]["AppIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Budget and spend */
+            200: {
+                headers: {
+                    "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                    "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppBudget"];
+                };
+            };
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+        };
+    };
     queryAudit: {
         parameters: {
             query?: {
                 /** @description Required for platform-key access; tenant keys are pinned to their own tenant. */
                 tenant_id?: components["parameters"]["TenantIdQuery"];
-                limit?: components["parameters"]["LimitQuery"];
+                /** @description Page size; a larger value is invalid_request. */
+                limit?: components["parameters"]["AuditLimitQuery"];
+                /** @description next_cursor of the previous page. Opaque; an unknown cursor, or one from another tenant, is invalid_request. */
+                cursor?: string;
+                /** @description total adds pagination.total, the events matching the filters. */
+                include?: "total";
                 action?: string;
                 resource_type?: string;
                 actor?: string;

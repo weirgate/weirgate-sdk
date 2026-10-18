@@ -45,6 +45,16 @@ export type CreditAdjustmentResult = components["responses"]["CreditAdjustmentOk
 export type UserCredits = components["responses"]["UserOk"]["content"]["application/json"];
 /** Whether a user's active tier comes from a store subscription or a manual/default assignment. */
 export type PlanSource = UserCredits["tier_source"];
+/** Why a user is blocked now: active conditions first, then refusals of the last 24 hours. Also `UserCredits["status"]`. */
+export type UserStatus = components["schemas"]["UserStatus"];
+export type UserStatusReason = components["schemas"]["UserStatusReason"];
+/** One row of `listUsers`: `UserRow` plus unlimited state, balance split, activity, and spend. */
+export type UserListRow = components["schemas"]["UserListRow"];
+/**
+ * A `listUsers` page. `pagination.total` counts every matching user up to 10,000; when
+ * `pagination.total_capped` is true more match, so show the count as "10,000+".
+ */
+export type UserListPage = components["responses"]["UserListOk"]["content"]["application/json"];
 export type ManagementKeyMetadata = components["schemas"]["ManagementKeyMetadata"];
 export type ManagementKeyRotateInput = Partial<components["schemas"]["ManagementKeyRotateInput"]>;
 export type RotatedManagementKey = components["schemas"]["RotatedManagementKey"];
@@ -69,8 +79,11 @@ export const ERROR_TYPES = [
   "output_contract_violation",
   "proposal_stale",
   "rate_limited",
+  "budget_exhausted",
   "telemetry_request_unavailable",
   "provider_unavailable",
+  "developer_credit_exhausted",
+  "provider_rate_limited",
   "purchase_invalid_signature",
   "purchase_wrong_app",
   "purchase_environment_mismatch",
@@ -80,7 +93,21 @@ export const ERROR_TYPES = [
   "funding_rail_refused",
   "funding_rail_unavailable",
   "user_credential_expired",
+  "platform_allowance_exhausted",
   "internal",
+] as const satisfies readonly ErrorType[];
+
+/**
+ * Error types that are never the end user's doing: the app owner's provider key, the
+ * provider, or the app's own Weirgate plan or budget refused the request. Show a
+ * "temporarily unavailable" message, never a paywall or purchase prompt. See
+ * `WeirgateError.mustNotShowPaywall`.
+ */
+export const NO_PAYWALL_ERROR_TYPES = [
+  "developer_credit_exhausted",
+  "provider_rate_limited",
+  "platform_allowance_exhausted",
+  "budget_exhausted",
 ] as const satisfies readonly ErrorType[];
 
 /**
@@ -139,6 +166,24 @@ export interface UsageQuery {
   until?: string | Date | undefined;
   limit?: number | undefined;
   groupBy?: "feature" | "user" | undefined;
+  signal?: AbortSignal | undefined;
+}
+
+export interface ListUsersQuery {
+  cursor?: string | undefined;
+  /** Page size, 1–100 (default 100). */
+  limit?: number | undefined;
+  /** Prefix of the external ID (case-sensitive), or a full user ID. */
+  q?: string | undefined;
+  tier?: string | undefined;
+  balanceLt?: number | undefined;
+  /** Only `true` filters; users with nothing left of a monthly allowance and no debt. */
+  outOfAllowance?: true | undefined;
+  activeSince?: string | Date | undefined;
+  inactiveSince?: string | Date | undefined;
+  paying?: boolean | undefined;
+  sort?: "id" | "spend" | "last_active" | "balance" | "created" | undefined;
+  direction?: "asc" | "desc" | undefined;
   signal?: AbortSignal | undefined;
 }
 
