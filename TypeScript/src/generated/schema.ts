@@ -295,7 +295,7 @@ export interface paths {
         put?: never;
         /**
          * Idempotently provision and read the Clerk organization tenant
-         * @description Developer identity is distinct from every app's end-user auth configuration.
+         * @description Developer identity is distinct from every app's end-user auth configuration. With X-Weirgate-Test-Run, a new tenant is created as that run's internal test tenant, only for a Clerk user whose public metadata weirgate_test_run names the run (that label stands in for the private-beta invitation).
          */
         post: operations["provisionDeveloperSession"];
         delete?: never;
@@ -1050,6 +1050,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/apps/{app_id}/usage/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export settled requests one row each, for billing and reconciliation
+         * @description One row per settled request in [since, until), oldest first, ordered by settlement time then event id, in pages of at most 1,000. Pass next_cursor back with the same since and until to read the next page; the pages together hold every row exactly once. For a complete export, end the window at least five minutes in the past, so no request that started inside it is still settling. Each row carries upstream_generation_id, the provider's own id for the generation (OpenRouter gen-…), which matches the id column of OpenRouter's Logs export; it is null for providers that return none and for requests settled before it was stored (2026-10-18), which reconcile only by time and tokens. external_id is null once the user is anonymized; the row stays, under the opaque user_id. provider_cost_usd is the app owner's cost on the developer rail (null when the provider reported none); user_cost_usd is the end user's cost on user_key, best effort. format=csv returns the same page as CSV (header row in the fixed column order of UsageExportRow, CRLF line ends, numbers in plain decimal); X-Weirgate-Next-Cursor and X-Weirgate-Truncated carry the paging. No prompt or response content is stored or returned. Requires the usage tool group.
+         */
+        get: operations["exportUsageEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/apps/{app_id}/usage/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Per-user, per-rail usage over whole UTC days, for billing your users
+         * @description One row per end user and funding rail with settled usage in [since, until), both UTC midnights: requests, prompt and completion tokens, units debited, provider_cost_usd (the app owner's cost, developer rail), user_cost_usd (user_key, best effort), and cost_unreported_requests (developer-rail requests whose provider reported no cost, so provider_cost_usd leaves them out). Rows are ordered by user_id, then rail, in pages of at most 1,000; pass next_cursor back with the same window. The sums come from a per-user, per-rail, per-UTC-day counter kept in the same statement as each settlement, so they equal the raw export's rows for the same window. Anonymized users keep their rows with external_id null. format=csv returns the same page as CSV (fixed column order of UsageRollupRow); X-Weirgate-Next-Cursor and X-Weirgate-Truncated carry the paging. Requires the usage tool group.
+         */
+        get: operations["getUsageByUserRail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/apps/{app_id}/failures": {
         parameters: {
             query?: never;
@@ -1352,7 +1392,7 @@ export interface paths {
         get: operations["getConfig"];
         /**
          * Apply a config document directly with apply scope
-         * @description Ruleset changes are rejected and must use preview-bound proposals. Keys the schema doesn't define are refused with invalid_request, detail.reason unknown_field, and detail.unknown (dotted paths), instead of being dropped; a value that fails validation lists detail.issues. A config read can be sent back unchanged: its read-only fields (revision, revisions, each feature's provider_policy, and funding.source) are ignored.
+         * @description Ruleset changes are rejected and must use preview-bound proposals. Keys the schema doesn't define are refused with invalid_request, detail.reason unknown_field, and detail.unknown (dotted paths), instead of being dropped; a value that fails validation lists detail.issues. A config read can be sent back unchanged: its read-only fields (revision, revisions, each feature's provider_policy, and funding.source) are ignored. With X-Weirgate-Test-Run (platform key), the document may create the run's internal test tenants and change or remove only them; every other tenant must be sent unchanged and is left untouched.
          */
         put: operations["applyConfigDirect"];
         post?: never;
@@ -1529,7 +1569,7 @@ export interface paths {
         };
         /**
          * Query tenant-scoped actor-attributed management audit events
-         * @description Newest first, ordered by created_at and then id. A page with truncated true carries next_cursor; pass it as cursor, with the same filters, for the next older page. Pages chain without gaps or repeats, and events written while paging are newer than the cursor, so they don't shift later pages. include=total adds the number of events matching the filters, ignoring cursor and limit.
+         * @description Newest first, ordered by created_at and then id. A page with truncated true carries next_cursor; pass it as cursor, with the same filters, for the next older page. Pages chain without gaps or repeats, and events written while paging are newer than the cursor, so they don't shift later pages. include=total adds the number of events matching the filters, ignoring cursor and limit. Weirgate's own access rows (platform_admin.request, one per platform-key call that read or changed the tenant's data) are left out unless include_platform_access is true or action names them; the page, cursor, and total all apply the same rule. Read-only access rows (detail.method GET or HEAD) are deleted after 90 days; Weirgate's writes and every other action are kept.
          */
         get: operations["queryAudit"];
         put?: never;
@@ -2733,6 +2773,7 @@ export interface components {
         };
         TenantConfig: {
             tenant_id: components["schemas"]["TenantId"];
+            /** @description The tenant's display name (weekly digest, dashboard). Optional in a submitted document: leaving it out keeps the current name, and never renames the tenant to its id. A new tenant without a name is named after its id. A config read always returns it. */
             name?: string;
             apps: components["schemas"]["AppConfig"][];
             alerts?: components["schemas"]["TenantAlerts"];
@@ -3024,7 +3065,7 @@ export interface components {
             providers: components["schemas"]["ProviderPolicyProviders"];
         };
         /**
-         * @description Documented as open-ended: new event types may be added under the current version. Consumers ignore types they don't handle (an endpoint created without `event_types` receives only the types that existed then). App-level events have `user_id: null`: `provider_policy.changed`; `provider.credit_exhausted` (a developer-funded request found the app's provider key out of credit; data.provider, funding_rail, feature_id, request_id, window_start; at most once per app, provider, and UTC hour); `provider.credit_restored` (the key's health probe reports credit again after an exhaustion; data.provider, exhausted_since, remaining_usd, basis; once per exhaustion); `provider.credit_low` (the probe found credit below the provider_credit_low floors and the previous probe did not; data.provider, remaining_usd, limit_usd, basis, below, floor_pct_usd, floor_usd; at most once per app, provider, and UTC hour). `user_key.rejected` is per user: the end user's own credential was rejected (data.reason `invalid`, `out_of_credit`, or `expired`; data.funding_rail, provider, external_id, feature_id, request_id, window_start); at most once per user and UTC hour. `platform.allowance_warning` and `platform.allowance_exhausted` are app-level and concern the tenant's Weirgate plan (see WebhookEvent.data).
+         * @description Documented as open-ended: new event types may be added under the current version. Consumers ignore types they don't handle (an endpoint created without `event_types` receives only the types that existed then). App-level events have `user_id: null`: `provider_policy.changed`; `provider.credit_exhausted` (a developer-funded request found the app's provider key out of credit; data.provider, funding_rail, feature_id, request_id, window_start; at most once per app, provider, and UTC hour); `provider.credit_restored` (after an exhaustion, either the key's health probe reports credit again or a developer-funded request succeeds, whichever comes first; data.provider, funding_rail, exhausted_since, detected_by `health_check` or `request`, request_id (null from the probe), remaining_usd and basis (null from a request); once per exhaustion); `provider.credit_low` (the probe found credit below the provider_credit_low floors and the previous probe did not; data.provider, remaining_usd, limit_usd, basis, below, floor_pct_usd, floor_usd; at most once per app, provider, and UTC hour). `user_key.rejected` is per user: the end user's own credential was rejected (data.reason `invalid`, `out_of_credit`, or `expired`; data.funding_rail, provider, external_id, feature_id, request_id, window_start); at most once per user and UTC hour. `platform.allowance_warning` and `platform.allowance_exhausted` are app-level and concern the tenant's Weirgate plan (see WebhookEvent.data).
          * @enum {string}
          */
         WebhookEventType: "allowance.low" | "allowance.exhausted" | "rule.breached" | "provider_policy.changed" | "grant.created" | "grant.reversed" | "credits.adjusted" | "tier.expiring" | "tier.expired" | "purchase.granted" | "purchase.refunded" | "provider.credit_exhausted" | "provider.credit_restored" | "provider.credit_low" | "user_key.rejected" | "platform.allowance_warning" | "platform.allowance_exhausted";
@@ -3327,12 +3368,15 @@ export interface components {
             funding_rail: components["schemas"]["FundingRail"] | null;
             /** @description The refused end user's opaque Weirgate user id (never the external id), as on usage events. Null for request errors and for refusals recorded before 2026-10-18. */
             user_id: string | null;
+            /** @description The error's detail.reason sub-code, when it has one (see the errors guide), for example user_provider_key_invalid `invalid` or `out_of_credit`, or a rail refusal reason. Identifier-shaped codes only; null when the error has none and for rows recorded before this field existed. */
+            reason: string | null;
         };
         UserStatusReason: {
             /** @description A current condition (out_of_allowance, rate_limited, abuse_blocked) or the error type of a recent refusal. */
             type: string;
             /** @description True while it blocks the user. Current conditions are active while they hold. A recent refusal of another type (for example user_provider_key_invalid or developer_credit_exhausted) can't be re-checked without calling the provider, so only the newest such refusal is active, and only when nothing succeeded for the user since. */
             active: boolean;
+            /** @description Per type. A current condition carries its numbers (out_of_allowance: units_available, units_pending, features; rate_limited: rule_source, max_requests, max_units, observed_requests, observed_units; abuse_blocked: in_flight, max_in_flight). A recent refusal carries kind `refusal`, status, feature_id, funding_rail, and reason (the refusal's detail.reason sub-code, e.g. user_provider_key_invalid `invalid` or `out_of_credit`; null when it has none). */
             detail: components["schemas"]["GenericObject"];
             /** Format: date-time */
             since: string | null;
@@ -3782,7 +3826,7 @@ export interface components {
                 available?: number;
             }[];
         };
-        /** @description A platform read without tenant_id returns tenants plus a revision map; a tenant read, or a platform read naming tenant_id, returns one tenant plus its revision. */
+        /** @description A platform read without tenant_id returns tenants plus a revision map; a tenant read, or a platform read naming tenant_id, returns one tenant plus its revision. Every tenant in a read carries its name (the document's, else the stored tenant name), so a read sent back as a proposal keeps it. */
         ConfigRead: {
             tenants: components["schemas"]["TenantConfig"][];
             revisions: {
@@ -3790,7 +3834,7 @@ export interface components {
             };
         } | {
             tenant_id: components["schemas"]["TenantId"];
-            name?: string;
+            name: string;
             apps: components["schemas"]["AppConfig"][];
             revision: number;
         };
@@ -3883,11 +3927,74 @@ export interface components {
             refusal_code: string | null;
             /** @description What the request would have cost the developer at list price; null when unknown. */
             list_price_usd: number | null;
+            upstream_generation_id: components["schemas"]["UpstreamGenerationId"];
+            upstream_provider: components["schemas"]["UpstreamProvider"];
             /** @description Tier snapshot at settlement; null only for pre-migration rows. */
             tier: string | null;
             request_id: components["schemas"]["RequestId"];
             /** Format: date-time */
             created_at: string;
+        };
+        /** @description The provider's id for this generation, for matching the provider's request log: OpenRouter gen-… (the id column of its Logs export), OpenAI resp_… (direct key) or the plan response id, Anthropic msg_…, xAI's completion id, Gemini's responseId. Null when the provider returned none, in mock mode, and for requests settled before 2026-10-18. Only identifier-shaped values are stored, never a credential. */
+        UpstreamGenerationId: string | null;
+        /** @description Who served the request: the feature's upstream (openrouter, openai, anthropic, google, xai), the plan provider on the user_plan rail, or mock. Null for requests settled before 2026-10-18. */
+        UpstreamProvider: string | null;
+        ExportWindow: {
+            /** Format: date-time */
+            since: string;
+            /** Format: date-time */
+            until: string;
+        };
+        ExportPagination: {
+            limit: number;
+            returned: number;
+            /** @description true when more rows follow this page. */
+            truncated: boolean;
+            next_cursor: string | null;
+        };
+        /** @description One settled request in the usage export. The CSV columns are these fields in this order. */
+        UsageExportRow: {
+            /**
+             * Format: date-time
+             * @description Settlement time (UTC).
+             */
+            created_at: string;
+            request_id: components["schemas"]["RequestId"];
+            upstream_generation_id: components["schemas"]["UpstreamGenerationId"];
+            feature_id: string;
+            /** @description Opaque Weirgate user id; kept after anonymization. */
+            user_id: string;
+            /** @description The app's id for the user; null once the user is anonymized. */
+            external_id: string | null;
+            funding_rail: components["schemas"]["FundingRail"];
+            upstream_provider: components["schemas"]["UpstreamProvider"];
+            /** @description The provider-reported routed model */
+            model: string;
+            prompt_tokens: number;
+            completion_tokens: number;
+            units_debited: number;
+            /** @description The app owner's cost on the developer rail as the provider reported it; 0 on user rails; null when unreported. */
+            provider_cost_usd: number | null;
+            /** @description The end user's cost on user_key */
+            user_cost_usd: number | null;
+            latency_ms: number;
+        };
+        /** @description One end user's settled usage on one funding rail over the window. The CSV columns are these fields in this order. */
+        UsageRollupRow: {
+            user_id: string;
+            /** @description Null once the user is anonymized. */
+            external_id: string | null;
+            funding_rail: components["schemas"]["FundingRail"];
+            requests: number;
+            prompt_tokens: number;
+            completion_tokens: number;
+            units: number;
+            /** @description The app owner's reported cost (developer rail). */
+            provider_cost_usd: number;
+            /** @description The end user's cost on user_key */
+            user_cost_usd: number;
+            /** @description Developer-rail requests with no reported cost */
+            cost_unreported_requests: number;
         };
         /** @description One client timing report accepted by POST /v1/telemetry/client. */
         ClientTelemetryEvent: {
@@ -4757,6 +4864,46 @@ export interface components {
                 "application/json": components["schemas"]["Readiness"];
             };
         };
+        /** @description One page of settled requests, as JSON or (format=csv) CSV */
+        UsageExportOk: {
+            headers: {
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                /** @description CSV only, when more rows follow. Pass it as cursor for the next page. */
+                "X-Weirgate-Next-Cursor"?: string;
+                /** @description CSV only. true when more rows follow this page. */
+                "X-Weirgate-Truncated"?: "true" | "false";
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    window: components["schemas"]["ExportWindow"];
+                    data: components["schemas"]["UsageExportRow"][];
+                    pagination: components["schemas"]["ExportPagination"];
+                };
+                "text/csv": string;
+            };
+        };
+        /** @description One page of per-user, per-rail usage, as JSON or (format=csv) CSV */
+        UsageRollupOk: {
+            headers: {
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                /** @description CSV only, when more rows follow. Pass it as cursor for the next page. */
+                "X-Weirgate-Next-Cursor"?: string;
+                /** @description CSV only. true when more rows follow this page. */
+                "X-Weirgate-Truncated"?: "true" | "false";
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    window: components["schemas"]["ExportWindow"];
+                    data: components["schemas"]["UsageRollupRow"][];
+                    pagination: components["schemas"]["ExportPagination"];
+                };
+                "text/csv": string;
+            };
+        };
         /** @description Recent refused and failed requests, newest first */
         FailureListOk: {
             headers: {
@@ -5229,6 +5376,8 @@ export interface components {
     };
     parameters: {
         XAppId: components["schemas"]["AppId"];
+        /** @description Automated test runs only (weirgate#257). The run id, run_<yyyymmdd>_<slug>_<rand>, labels what the request creates: the platform key's config write creates the run's internal test tenant, and inside that tenant new apps, users, and keys carry the run id. Accepted on any route, but only for the run's own internal test tenant (on the data plane, X-App-Id must name one of its apps; a tenant key or Clerk session must belong to it; a Clerk user provisioning it must carry the run in public metadata weirgate_test_run); anything else is insufficient_scope with detail.reason test_run_not_allowed. A malformed id is invalid_request test_run_invalid; an ended run's id is invalid_request test_run_ended. Labelled data is left out of dashboard counts, alerts, and the platform meter, and is deleted when the run ends. */
+        XWeirgateTestRun: string;
         /** @description Names the rail to start the feature's funding chain from, optionally with the plan provider: `user_plan; provider=openai_chatgpt`, `user_key`, or `developer`. Absent means walk the chain from its first rail. Later rails still apply per on_refusal. */
         XWeirgateFunding: string;
         XFeatureId: components["schemas"]["FeatureId"];
@@ -5436,6 +5585,8 @@ export interface operations {
                 "X-Idempotency-Key"?: components["parameters"]["XIdempotencyKey"];
                 /** @description Names the rail to start the feature's funding chain from, optionally with the plan provider: `user_plan; provider=openai_chatgpt`, `user_key`, or `developer`. Absent means walk the chain from its first rail. Later rails still apply per on_refusal. */
                 "X-Weirgate-Funding"?: components["parameters"]["XWeirgateFunding"];
+                /** @description Automated test runs only (weirgate#257). The run id, run_<yyyymmdd>_<slug>_<rand>, labels what the request creates: the platform key's config write creates the run's internal test tenant, and inside that tenant new apps, users, and keys carry the run id. Accepted on any route, but only for the run's own internal test tenant (on the data plane, X-App-Id must name one of its apps; a tenant key or Clerk session must belong to it; a Clerk user provisioning it must carry the run in public metadata weirgate_test_run); anything else is insufficient_scope with detail.reason test_run_not_allowed. A malformed id is invalid_request test_run_invalid; an ended run's id is invalid_request test_run_ended. Labelled data is left out of dashboard counts, alerts, and the platform meter, and is deleted when the run ends. */
+                "X-Weirgate-Test-Run"?: components["parameters"]["XWeirgateTestRun"];
             };
             path?: never;
             cookie?: never;
@@ -5483,6 +5634,8 @@ export interface operations {
                 "X-Idempotency-Key"?: components["parameters"]["XIdempotencyKey"];
                 /** @description Names the rail to start the feature's funding chain from, optionally with the plan provider: `user_plan; provider=openai_chatgpt`, `user_key`, or `developer`. Absent means walk the chain from its first rail. Later rails still apply per on_refusal. */
                 "X-Weirgate-Funding"?: components["parameters"]["XWeirgateFunding"];
+                /** @description Automated test runs only (weirgate#257). The run id, run_<yyyymmdd>_<slug>_<rand>, labels what the request creates: the platform key's config write creates the run's internal test tenant, and inside that tenant new apps, users, and keys carry the run id. Accepted on any route, but only for the run's own internal test tenant (on the data plane, X-App-Id must name one of its apps; a tenant key or Clerk session must belong to it; a Clerk user provisioning it must carry the run in public metadata weirgate_test_run); anything else is insufficient_scope with detail.reason test_run_not_allowed. A malformed id is invalid_request test_run_invalid; an ended run's id is invalid_request test_run_ended. Labelled data is left out of dashboard counts, alerts, and the platform meter, and is deleted when the run ends. */
+                "X-Weirgate-Test-Run"?: components["parameters"]["XWeirgateTestRun"];
             };
             path?: never;
             cookie?: never;
@@ -5565,6 +5718,8 @@ export interface operations {
             query?: never;
             header: {
                 "X-App-Id": components["parameters"]["XAppId"];
+                /** @description Automated test runs only (weirgate#257). The run id, run_<yyyymmdd>_<slug>_<rand>, labels what the request creates: the platform key's config write creates the run's internal test tenant, and inside that tenant new apps, users, and keys carry the run id. Accepted on any route, but only for the run's own internal test tenant (on the data plane, X-App-Id must name one of its apps; a tenant key or Clerk session must belong to it; a Clerk user provisioning it must carry the run in public metadata weirgate_test_run); anything else is insufficient_scope with detail.reason test_run_not_allowed. A malformed id is invalid_request test_run_invalid; an ended run's id is invalid_request test_run_ended. Labelled data is left out of dashboard counts, alerts, and the platform meter, and is deleted when the run ends. */
+                "X-Weirgate-Test-Run"?: components["parameters"]["XWeirgateTestRun"];
             };
             path?: never;
             cookie?: never;
@@ -6020,7 +6175,10 @@ export interface operations {
     provisionDeveloperSession: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Automated test runs only (weirgate#257). The run id, run_<yyyymmdd>_<slug>_<rand>, labels what the request creates: the platform key's config write creates the run's internal test tenant, and inside that tenant new apps, users, and keys carry the run id. Accepted on any route, but only for the run's own internal test tenant (on the data plane, X-App-Id must name one of its apps; a tenant key or Clerk session must belong to it; a Clerk user provisioning it must carry the run in public metadata weirgate_test_run); anything else is insufficient_scope with detail.reason test_run_not_allowed. A malformed id is invalid_request test_run_invalid; an ended run's id is invalid_request test_run_ended. Labelled data is left out of dashboard counts, alerts, and the platform meter, and is deleted when the run ends. */
+                "X-Weirgate-Test-Run"?: components["parameters"]["XWeirgateTestRun"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -6587,7 +6745,10 @@ export interface operations {
     mintManagementKey: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Automated test runs only (weirgate#257). The run id, run_<yyyymmdd>_<slug>_<rand>, labels what the request creates: the platform key's config write creates the run's internal test tenant, and inside that tenant new apps, users, and keys carry the run id. Accepted on any route, but only for the run's own internal test tenant (on the data plane, X-App-Id must name one of its apps; a tenant key or Clerk session must belong to it; a Clerk user provisioning it must carry the run in public metadata weirgate_test_run); anything else is insufficient_scope with detail.reason test_run_not_allowed. A malformed id is invalid_request test_run_invalid; an ended run's id is invalid_request test_run_ended. Labelled data is left out of dashboard counts, alerts, and the platform meter, and is deleted when the run ends. */
+                "X-Weirgate-Test-Run"?: components["parameters"]["XWeirgateTestRun"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7065,6 +7226,64 @@ export interface operations {
             404: components["responses"]["ResourceNotFound"];
         };
     };
+    exportUsageEvents: {
+        parameters: {
+            query: {
+                /** @description Window start (inclusive), ISO 8601. */
+                since: string;
+                /** @description Window end (exclusive), ISO 8601; later than since. */
+                until: string;
+                /** @description next_cursor of the previous page, with the same since and until. */
+                cursor?: string;
+                /** @description Page size; a larger value is invalid_request. */
+                limit?: number;
+                /** @description csv returns the page as text/csv instead of JSON. */
+                format?: "csv";
+            };
+            header?: never;
+            path: {
+                app_id: components["parameters"]["AppIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["UsageExportOk"];
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+        };
+    };
+    getUsageByUserRail: {
+        parameters: {
+            query: {
+                /** @description First UTC day (a UTC midnight, inclusive). */
+                since: string;
+                /** @description End UTC midnight (exclusive); later than since. */
+                until: string;
+                /** @description next_cursor of the previous page, with the same since and until. */
+                cursor?: string;
+                /** @description Page size; a larger value is invalid_request. */
+                limit?: number;
+                /** @description csv returns the page as text/csv instead of JSON. */
+                format?: "csv";
+            };
+            header?: never;
+            path: {
+                app_id: components["parameters"]["AppIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["UsageRollupOk"];
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+        };
+    };
     listFailures: {
         parameters: {
             query?: {
@@ -7447,7 +7666,10 @@ export interface operations {
     applyConfigDirect: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Automated test runs only (weirgate#257). The run id, run_<yyyymmdd>_<slug>_<rand>, labels what the request creates: the platform key's config write creates the run's internal test tenant, and inside that tenant new apps, users, and keys carry the run id. Accepted on any route, but only for the run's own internal test tenant (on the data plane, X-App-Id must name one of its apps; a tenant key or Clerk session must belong to it; a Clerk user provisioning it must carry the run in public metadata weirgate_test_run); anything else is insufficient_scope with detail.reason test_run_not_allowed. A malformed id is invalid_request test_run_invalid; an ended run's id is invalid_request test_run_ended. Labelled data is left out of dashboard counts, alerts, and the platform meter, and is deleted when the run ends. */
+                "X-Weirgate-Test-Run"?: components["parameters"]["XWeirgateTestRun"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7734,6 +7956,8 @@ export interface operations {
                 tenant_id?: components["parameters"]["TenantIdQuery"];
                 /** @description Page size; a larger value is invalid_request. */
                 limit?: components["parameters"]["AuditLimitQuery"];
+                /** @description true includes platform_admin.request rows (Weirgate's own access to the tenant). Default false. Use the same value on every page of a cursor chain. */
+                include_platform_access?: boolean;
                 /** @description next_cursor of the previous page. Opaque; an unknown cursor, or one from another tenant, is invalid_request. */
                 cursor?: string;
                 /** @description total adds pagination.total, the events matching the filters. */

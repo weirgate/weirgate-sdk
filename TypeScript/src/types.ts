@@ -28,6 +28,28 @@ export type OutputContract = components["schemas"]["OutputContract"];
 export type UsageRollup = components["schemas"]["UsageRollup"];
 export type UsageRollupPage = components["schemas"]["UsageRollupPage"];
 export type UserRow = components["schemas"]["UserRow"];
+/** One settled request, as the management API reads it (e.g. `UserCredits` recent usage). */
+export type UsageEvent = components["schemas"]["UsageEvent"];
+/**
+ * The provider's id for the generation (OpenRouter `gen-…`, OpenAI `resp_…`, Anthropic
+ * `msg_…`, …) for matching the provider's request log. Null when the provider returned
+ * none, in mock mode, and for requests settled before 2026-10-18.
+ */
+export type UpstreamGenerationId = components["schemas"]["UpstreamGenerationId"];
+/** Who served the request (`openrouter`, `openai`, `anthropic`, `google`, `xai`, the plan provider, or `mock`); null before 2026-10-18. */
+export type UpstreamProvider = components["schemas"]["UpstreamProvider"];
+/** The `[since, until)` window an export page answers. */
+export type ExportWindow = components["schemas"]["ExportWindow"];
+/** Export paging: pass `next_cursor` back, with the same window, while `truncated` is true. */
+export type ExportPagination = components["schemas"]["ExportPagination"];
+/** One settled request in the usage export. The CSV columns are these fields in this order. */
+export type UsageExportRow = components["schemas"]["UsageExportRow"];
+/** One page of `exportUsageEvents` (JSON). */
+export type UsageExportPage = components["responses"]["UsageExportOk"]["content"]["application/json"];
+/** One end user's settled usage on one funding rail over whole UTC days. The CSV columns are these fields in this order. */
+export type UsageRollupRow = components["schemas"]["UsageRollupRow"];
+/** One page of `getUsageByUserRail` (JSON). */
+export type UsageByUserRailPage = components["responses"]["UsageRollupOk"]["content"]["application/json"];
 export type GrantRow = components["schemas"]["GrantRow"];
 export type StoreBalance = components["schemas"]["StoreBalance"];
 export type UserBalance = components["schemas"]["UserBalance"];
@@ -171,6 +193,38 @@ export interface UsageQuery {
    */
   groupBy?: "feature" | "user" | "model" | "funding_rail" | "refusal_code" | undefined;
   signal?: AbortSignal | undefined;
+}
+
+/** Query for `exportUsageEvents` and its CSV and iterator variants. */
+export interface UsageExportQuery {
+  /** Window start (inclusive). Required. */
+  since: string | Date;
+  /**
+   * Window end (exclusive), later than `since`. Required. For a complete export, end the
+   * window at least five minutes in the past so no request in it is still settling.
+   */
+  until: string | Date;
+  /** `next_cursor` of the previous page, with the same `since` and `until`. */
+  cursor?: string | undefined;
+  /** Page size, 1–1000 (default 1000). */
+  limit?: number | undefined;
+  signal?: AbortSignal | undefined;
+}
+
+/**
+ * Query for `getUsageByUserRail` and its CSV and iterator variants. `since` and `until`
+ * must be UTC midnights (whole UTC days); the SDK rejects other instants before sending.
+ */
+export type UsageByUserRailQuery = UsageExportQuery;
+
+/** One CSV page of an export. Every page starts with the header row. */
+export interface UsageCsvPage {
+  /** The page as `text/csv`: header row, then rows, CRLF line ends. */
+  csv: string;
+  /** From `X-Weirgate-Next-Cursor`; null on the last page. */
+  nextCursor: string | null;
+  /** From `X-Weirgate-Truncated`: true when more rows follow this page. */
+  truncated: boolean;
 }
 
 export interface ListUsersQuery {

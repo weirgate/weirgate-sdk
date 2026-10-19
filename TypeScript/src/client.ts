@@ -26,8 +26,15 @@ import {
   type ResponseMetadata,
   type RotateAdminKeyOptions,
   type RotatedManagementKey,
+  type UsageByUserRailPage,
+  type UsageByUserRailQuery,
+  type UsageCsvPage,
+  type UsageExportPage,
+  type UsageExportQuery,
+  type UsageExportRow,
   type UsageQuery,
   type UsageRollupPage,
+  type UsageRollupRow,
   type UserCredits,
   type UserListPage,
   type UserStatus,
@@ -83,7 +90,11 @@ interface InternalRequestOptions extends RequestOptions {
   admin?: boolean | undefined;
   /** Reject a missing key instead of generating one. */
   requireIdempotencyKey?: boolean | undefined;
+  /** Overrides the default `Accept` header. */
+  accept?: string | undefined;
 }
+
+type ExportPath = "usage/events" | "usage/users";
 
 export class Weirgate {
   readonly appId: string | undefined;
@@ -266,6 +277,61 @@ export class Weirgate {
     return result;
   }
 
+  /**
+   * One JSON page of settled requests in `[since, until)`, oldest first, at most 1,000
+   * rows. While `data.pagination.truncated` is true, call again with
+   * `cursor: data.pagination.next_cursor` and the same window; `iterateUsageEvents` does
+   * that for you. Each row carries `upstream_generation_id` for matching the provider's
+   * log (OpenRouter's Logs export `id` column). Needs the usage tool group.
+   */
+  exportUsageEvents(appId: string, query: UsageExportQuery): Promise<WeirgateResult<UsageExportPage>> {
+    return this.exportJson<UsageExportPage>(appId, "usage/events", query, false);
+  }
+
+  /** `exportUsageEvents` as one CSV page (columns in `UsageExportRow` order), with the paging from the response headers. */
+  exportUsageEventsCsv(appId: string, query: UsageExportQuery): Promise<WeirgateResult<UsageCsvPage>> {
+    return this.exportCsv(appId, "usage/events", query, false);
+  }
+
+  /** Every settled request in the window, following the cursor across pages. */
+  async *iterateUsageEvents(appId: string, query: UsageExportQuery): AsyncGenerator<UsageExportRow, void, undefined> {
+    for await (const page of this.exportJsonPages<UsageExportPage>(appId, "usage/events", query, false)) {
+      yield* page.data.data;
+    }
+  }
+
+  /** Every CSV page of the window in order. Each page starts with the header row; drop it from later pages to concatenate. */
+  iterateUsageEventsCsv(appId: string, query: UsageExportQuery): AsyncGenerator<WeirgateResult<UsageCsvPage>, void, undefined> {
+    return this.exportCsvPages(appId, "usage/events", query, false);
+  }
+
+  /**
+   * One JSON page of per-user, per-rail sums over whole UTC days (`since` and `until`
+   * are UTC midnights), ordered by user, then rail. The sums equal the raw export's rows
+   * for the same window. Page with `cursor` as in `exportUsageEvents`, or use
+   * `iterateUsageByUserRail`. Needs the usage tool group.
+   */
+  getUsageByUserRail(appId: string, query: UsageByUserRailQuery): Promise<WeirgateResult<UsageByUserRailPage>> {
+    return this.exportJson<UsageByUserRailPage>(appId, "usage/users", query, true);
+  }
+
+  /** `getUsageByUserRail` as one CSV page (columns in `UsageRollupRow` order), with the paging from the response headers. */
+  getUsageByUserRailCsv(appId: string, query: UsageByUserRailQuery): Promise<WeirgateResult<UsageCsvPage>> {
+    return this.exportCsv(appId, "usage/users", query, true);
+  }
+
+  /** Every user × rail row in the window, following the cursor across pages. */
+  async *iterateUsageByUserRail(appId: string, query: UsageByUserRailQuery): AsyncGenerator<UsageRollupRow, void, undefined> {
+    for await (const page of this.exportJsonPages<UsageByUserRailPage>(appId, "usage/users", query, true)) {
+      yield* page.data.data;
+    }
+  }
+
+  /** Every CSV page of the user × rail rollup in order. Each page starts with the header row. */
+  iterateUsageByUserRailCsv(appId: string, query: UsageByUserRailQuery): AsyncGenerator<WeirgateResult<UsageCsvPage>, void, undefined> {
+    return this.exportCsvPages(appId, "usage/users", query, true);
+  }
+
   assignUserTier(
     appId: string,
     externalId: string,
@@ -423,6 +489,77 @@ export class Weirgate {
     );
   }
 
+  private exportPath(appId: string, path: ExportPath, query: UsageExportQuery, utcDays: boolean, csv: boolean): string {
+    const since = exportBound("since", query?.since, utcDays);
+    const until = exportBound("until", query?.until, utcDays);
+    const parameters = new URLSearchParams({ since, until });
+    if (query.cursor) parameters.set("cursor", query.cursor);
+    if (query.limit !== undefined) parameters.set("limit", String(query.limit));
+    if (csv) parameters.set("format", "csv");
+    return `/v1/admin/apps/${encodeURIComponent(appId)}/${path}?${parameters}`;
+  }
+
+  /** Async, so a missing or invalid bound rejects the promise instead of throwing. */
+  private async exportJson<T>(appId: string, path: ExportPath, query: UsageExportQuery, utcDays: boolean): Promise<WeirgateResult<T>> {
+    return await this.requestJson("GET", this.exportPath(appId, path, query, utcDays, false), undefined, {
+      admin: true, signal: query.signal,
+    });
+  }
+
+  private async exportCsv(
+    appId: string,
+    path: ExportPath,
+    query: UsageExportQuery,
+    utcDays: boolean,
+  ): Promise<WeirgateResult<UsageCsvPage>> {
+    const response = await this.send("GET", this.exportPath(appId, path, query, utcDays, true), undefined, {
+      admin: true, signal: query.signal, accept: "text/csv, application/json",
+    });
+    const metadata = this.metadata(response);
+    if (!response.ok) throw await WeirgateError.fromResponse(response);
+    if (!response.headers.get("content-type")?.toLowerCase().includes("text/csv")) {
+      throw new WeirgateProtocolError(
+        "Weirgate CSV export response was not text/csv", metadata.requestId, metadata.apiVersion, response.status,
+      );
+    }
+    const csv = await response.text();
+    const nextCursor = response.headers.get("x-weirgate-next-cursor") || null;
+    const truncatedHeader = response.headers.get("x-weirgate-truncated");
+    const truncated = truncatedHeader === null ? nextCursor !== null : truncatedHeader.toLowerCase() === "true";
+    return { data: { csv, nextCursor, truncated }, headers: response.headers, ...metadata };
+  }
+
+  private async *exportJsonPages<T extends { pagination: { truncated: boolean; next_cursor: string | null } }>(
+    appId: string,
+    path: ExportPath,
+    query: UsageExportQuery,
+    utcDays: boolean,
+  ): AsyncGenerator<WeirgateResult<T>, void, undefined> {
+    let cursor = query.cursor;
+    for (;;) {
+      const page = await this.exportJson<T>(appId, path, { ...query, cursor }, utcDays);
+      yield page;
+      const { truncated, next_cursor: next } = page.data.pagination;
+      if (!truncated) return;
+      cursor = nextExportCursor(next, cursor, page);
+    }
+  }
+
+  private async *exportCsvPages(
+    appId: string,
+    path: ExportPath,
+    query: UsageExportQuery,
+    utcDays: boolean,
+  ): AsyncGenerator<WeirgateResult<UsageCsvPage>, void, undefined> {
+    let cursor = query.cursor;
+    for (;;) {
+      const page = await this.exportCsv(appId, path, { ...query, cursor }, utcDays);
+      yield page;
+      if (!page.data.truncated) return;
+      cursor = nextExportCursor(page.data.nextCursor, cursor, page);
+    }
+  }
+
   /** One funded data-plane call with plan header injection and the funding retry rules. */
   private async funded(
     path: string,
@@ -547,7 +684,7 @@ export class Weirgate {
     options: InternalRequestOptions,
   ): Promise<Response> {
     const headers = new Headers(options.headers);
-    headers.set("Accept", "application/json, text/event-stream");
+    headers.set("Accept", options.accept ?? "application/json, text/event-stream");
     if (body !== undefined) headers.set("Content-Type", "application/json");
     if (this.appId && !options.admin) headers.set("X-App-Id", this.appId);
     if (options.admin) {
@@ -701,6 +838,34 @@ function safeMethod(method: string): boolean {
 
 function dateParameter(value: string | Date): string {
   return value instanceof Date ? value.toISOString() : value;
+}
+
+/**
+ * An export window bound as sent. Both are required; the per-user rollup also needs UTC
+ * midnights. Anything else (format, order, range) is left to the server.
+ */
+function exportBound(name: "since" | "until", value: string | Date | undefined, utcMidnight: boolean): string {
+  if (value === undefined || value === null || value === "") {
+    throw new TypeError(`${name} is required for usage exports`);
+  }
+  const text = dateParameter(value);
+  if (utcMidnight) {
+    const instant = value instanceof Date ? value : new Date(text);
+    if (!Number.isNaN(instant.getTime()) && instant.getTime() % 86_400_000 !== 0) {
+      throw new TypeError(`${name} must be a UTC midnight for the per-user rollup (got ${text})`);
+    }
+  }
+  return text;
+}
+
+/** The cursor for the next page; a truncated page without a new cursor would loop or stop short. */
+function nextExportCursor(next: string | null, previous: string | undefined, page: ResponseMetadata): string {
+  if (!next || next === previous) {
+    throw new WeirgateProtocolError(
+      "Weirgate export page was truncated but gave no new cursor", page.requestId, page.apiVersion, page.status,
+    );
+  }
+  return next;
 }
 
 function numericHeader(value: string | null): number | null {

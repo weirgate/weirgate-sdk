@@ -346,6 +346,60 @@ every match up to 10,000; when `pagination.total_capped` is true more match, so 
 count as "10,000+". Pass `pagination.next_cursor` as `cursor`, with the same sort and
 direction, for the next page.
 
+## Exporting usage for billing and reconciliation
+
+Two reads (a key with the `usage` tool group) export settled usage for a window:
+
+| Method | Reads |
+|---|---|
+| `exportUsageEvents(appId, { since, until, cursor?, limit? })` | `GET /v1/admin/apps/{app_id}/usage/events`: one `UsageExportRow` per settled request in `[since, until)`, oldest first |
+| `getUsageByUserRail(appId, { since, until, cursor?, limit? })` | `GET /v1/admin/apps/{app_id}/usage/users`: one `UsageRollupRow` per end user and funding rail over whole UTC days |
+
+`since` and `until` are required (ISO strings or `Date`s). For the per-user rollup both
+must be UTC midnights; the SDK rejects other instants before sending. Everything else
+(order, range) is checked by the server. Pages hold at most 1,000 rows (`limit` 1–1000).
+For a complete raw export, end the window at least five minutes in the past so no request
+in it is still settling.
+
+Each method returns one page; pass `data.pagination.next_cursor` back as `cursor`, with
+the same window, while `data.pagination.truncated` is true. The `iterate…` methods do that
+for you and yield every row once:
+
+```ts
+const admin = new Weirgate({ adminKey: process.env.WEIRGATE_USAGE_KEY });
+
+for await (const row of admin.iterateUsageEvents("my-app", {
+  since: "2026-10-01T00:00:00Z",
+  until: "2026-11-01T00:00:00Z",
+})) {
+  // row.upstream_generation_id matches the id column of OpenRouter's Logs export
+  // (null for providers that return none and for requests settled before 2026-10-18).
+  reconcile(row.upstream_generation_id, row.upstream_provider, row.provider_cost_usd);
+}
+
+for await (const row of admin.iterateUsageByUserRail("my-app", { since, until })) {
+  bill(row.external_id ?? row.user_id, row.funding_rail, row.units);
+}
+```
+
+For CSV, `exportUsageEventsCsv` and `getUsageByUserRailCsv` return one page as
+`{ csv, nextCursor, truncated }`, read from the `X-Weirgate-Next-Cursor` and
+`X-Weirgate-Truncated` headers; `iterateUsageEventsCsv` and `iterateUsageByUserRailCsv`
+yield every page. The columns are the row type's fields in order, with CRLF line ends.
+Every page starts with the header row, so drop it from later pages when you concatenate:
+
+```ts
+let first = true;
+for await (const { data } of admin.iterateUsageEventsCsv("my-app", { since, until })) {
+  out.write(first ? data.csv : data.csv.slice(data.csv.indexOf("\r\n") + 2));
+  first = false;
+}
+```
+
+A truncated page with no new cursor throws `WeirgateProtocolError` rather than ending the
+export short. `UsageEvent` (for example in `getUserCredits` recent usage) carries
+`upstream_generation_id` and `upstream_provider` too.
+
 ## Verifying webhooks
 
 Verify every delivery over the exact raw body before parsing it:
