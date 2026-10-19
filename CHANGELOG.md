@@ -2,6 +2,36 @@
 
 All notable public SDK changes are recorded here.
 
+## @weirgate/sdk 0.9.0 — 2026-10-18
+
+Usage export and the per-user × rail rollup of weirgate#264 (weirgate-sdk#38). Spec
+provenance moves to weirgate `6ef220a`. Minor bump: new methods and types; no existing
+call signatures changed. WeirgateKit is unchanged: it has no management client, and these
+are management endpoints.
+
+### TypeScript (@weirgate/sdk 0.9.0)
+
+- `exportUsageEvents(appId, { since, until, cursor, limit })`:
+  `GET /v1/admin/apps/{app_id}/usage/events`, one JSON page of `UsageExportRow`
+  (`UsageExportPage`). `iterateUsageEvents` follows `next_cursor` across pages and yields
+  every row.
+- `getUsageByUserRail(appId, { since, until, cursor, limit })`:
+  `GET /v1/admin/apps/{app_id}/usage/users`, one JSON page of `UsageRollupRow`
+  (`UsageByUserRailPage`). `iterateUsageByUserRail` yields every row.
+- CSV (`format=csv`): `exportUsageEventsCsv`, `getUsageByUserRailCsv` return
+  `UsageCsvPage` (`csv`, `nextCursor` from `X-Weirgate-Next-Cursor`, `truncated` from
+  `X-Weirgate-Truncated`); `iterateUsageEventsCsv` and `iterateUsageByUserRailCsv` yield
+  every page.
+- Client-side checks: `since` and `until` are required; the rollup's bounds must be UTC
+  midnights. A truncated page without a new cursor throws `WeirgateProtocolError`.
+- New exported types: `UsageEvent`, `UsageExportRow`, `UsageRollupRow`,
+  `UpstreamGenerationId`, `UpstreamProvider`, `ExportWindow`, `ExportPagination`,
+  `UsageExportPage`, `UsageByUserRailPage`, `UsageExportQuery`, `UsageByUserRailQuery`,
+  `UsageCsvPage`. `UsageEvent` gains `upstream_generation_id` and `upstream_provider`.
+- Regenerated types from weirgate `6ef220a`. Besides the above: `FailureRow.reason`,
+  `ConfigRead.name` is now required, and the optional `X-Weirgate-Test-Run` request
+  header parameter.
+
 ## @weirgate/sdk 0.8.0 and WeirgateKit 0.7.0 — 2026-10-18
 
 Catch-up with the server contract of 2026-10-18 (weirgate#245, #246, #247; weirgate-sdk#36).
