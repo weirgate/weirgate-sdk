@@ -21,7 +21,7 @@ const sourceCommit = execFileSync("git", ["-C", dirname(input), "rev-parse", "HE
 }).trim();
 writeFileSync(resolve(packageRoot, "spec-provenance.json"), `${JSON.stringify({
   api_version: version,
-  source_repository: "https://github.com/weirgate/weirgate",
+  source_repository: "https://github.com/weirgate/weirgate-platform",
   source_path: "openapi.yaml",
   source_commit: sourceCommit,
   generator: "openapi-typescript",
