@@ -437,7 +437,7 @@ ones this SDK knows (including `provider.credit_low`, `provider.credit_exhausted
 The spec is not forked into this repository. Regenerate from a local Weirgate checkout:
 
 ```sh
-npm run generate -- --input ../../weirgate/openapi.yaml
+npm run generate -- --input ../../weirgate-platform/openapi.yaml
 ```
 
 `spec-provenance.json` records the API version and source commit.
