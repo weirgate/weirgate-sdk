@@ -440,4 +440,6 @@ The spec is not forked into this repository. Regenerate from a local Weirgate ch
 npm run generate -- --input ../../weirgate-platform/openapi.yaml
 ```
 
-`spec-provenance.json` records the API version and source commit.
+`spec-provenance.json` records the API version and source commit. The generator writes the same
+provenance into WeirgateKit (`Resources/spec-provenance.json` and `WeirgateKitInfo`), so
+the two SDKs always name the same spec.
