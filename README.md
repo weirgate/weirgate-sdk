@@ -26,7 +26,7 @@ For Swift Package Manager, add
 releases directly resolvable from that URL:
 
 ```swift
-.package(url: "https://github.com/weirgate/weirgate-sdk.git", from: "0.6.0")
+.package(url: "https://github.com/weirgate/weirgate-sdk.git", from: "0.7.1")
 ```
 
 The clients require application-issued end-user JWTs. Provider credentials remain
