@@ -332,7 +332,7 @@ export interface paths {
         put?: never;
         /**
          * Create a Stripe-hosted subscription checkout session
-         * @description Requires a tenant owner with a recent second factor. Tier state changes only from verified Stripe webhooks.
+         * @description Requires a tenant owner with a recent sign-in check. Tier state changes only from verified Stripe webhooks.
          */
         post: operations["createBillingCheckout"];
         delete?: never;
@@ -352,7 +352,7 @@ export interface paths {
         put?: never;
         /**
          * Create a Stripe-hosted customer portal session
-         * @description Requires a tenant owner with a recent second factor.
+         * @description Requires a tenant owner with a recent sign-in check.
          */
         post: operations["createBillingPortal"];
         delete?: never;
@@ -443,7 +443,7 @@ export interface paths {
         put?: never;
         /**
          * Authorize a bounded MCP or CLI grant from a developer session
-         * @description Defaults to propose scope; apply requires a recent Clerk second factor.
+         * @description Defaults to propose scope; apply requires a recent sign-in check.
          */
         post: operations["authorizeSessionGrant"];
         delete?: never;
@@ -459,7 +459,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Weirgate-owned tenant memberships and roles */
+        /**
+         * List Weirgate-owned tenant memberships and roles
+         * @description Anyone Clerk no longer lists in the tenant's organization (removed in Clerk directly) is removed from Weirgate first and audited as `developer.member.removed` with `detail.reason: clerk_membership_missing`. Nothing changes when Clerk can't answer, and the tenant's last owner is never removed this way. An owner whose Clerk role isn't `org:admin` is promoted in Clerk (best effort, audited as `developer.membership.clerk_role.synced`); nobody is demoted in Clerk by a read.
+         */
         get: operations["listDeveloperMembers"];
         put?: never;
         post?: never;
@@ -479,14 +482,58 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Remove a person from the team
+         * @description Owner-only. Requires a recent sign-in check. Removes the person's Clerk organization membership, then their Weirgate membership, and their developer identity when it has no other membership; audited as `developer.member.removed`. Safe to retry: when the Clerk membership is already gone (`clerk_membership: already_absent`), the Weirgate rows are still removed. Refuses removing yourself (`resource_conflict`, `detail.reason: self_removal`) and the tenant's last owner (`detail.reason: last_owner`). A Clerk refusal is `resource_conflict` with `detail.reason: clerk_refused`; a Clerk outage is `provider_unavailable` with `detail.service: clerk`, and nothing is changed.
+         */
+        delete: operations["removeDeveloperMember"];
         options?: never;
         head?: never;
         /**
          * Change a Weirgate-owned tenant role
-         * @description Owner-only. Requires a recent second factor and preserves at least one tenant owner.
+         * @description Owner-only. Requires a recent sign-in check. Weirgate's role is the source of truth and the Clerk organization role follows it (owner → `org:admin`, member → `org:member`); Clerk is set first, so a retry after a partial failure finishes. Sending the current role re-syncs Clerk without an audit row. Demoting the tenant's last owner is `resource_conflict` with `detail.reason: last_owner` (serialized per tenant); a Clerk refusal is `resource_conflict` `clerk_refused`, and a Clerk outage is `provider_unavailable` with `detail.service: clerk`.
          */
         patch: operations["updateDeveloperMemberRole"];
+        trace?: never;
+    };
+    "/v1/admin/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Invite someone to the team
+         * @description Owner-only. Requires a recent sign-in check. Invites the address to the tenant's Clerk organization as `org:member`; they join Weirgate as `member` on first sign-in. Any Weirgate owner can invite, whatever their Clerk role. Audited as `developer.invitation.created` (without the address). An existing pending invitation is `resource_conflict` `invitation_exists`; someone already on the team is `already_member`; an invalid address is `invalid_request` `email_invalid`. An automated test run's tenant may invite only allow-listed inboxes (`test_run_recipient_not_allowed`).
+         */
+        post: operations["createDeveloperInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/invitations/{invitation_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke a pending team invitation
+         * @description Owner-only. Requires a recent sign-in check. Revokes a pending invitation to the tenant's Clerk organization (`invitation_id` is the Clerk organization invitation id); audited as `developer.invitation.revoked`. Revoking an already revoked invitation succeeds with `already_revoked: true`. An accepted or expired invitation is `resource_conflict` with `detail.reason: invitation_not_pending`; an invitation of another organization is `resource_not_found`.
+         */
+        post: operations["revokeDeveloperInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/session-grants/exchange": {
@@ -627,13 +674,13 @@ export interface paths {
         get?: never;
         /**
          * Create or replace a write-only provider key
-         * @description Clerk developer sessions require a recent second factor.
+         * @description Clerk developer sessions require a recent sign-in check.
          */
         put: operations["putProviderKey"];
         post?: never;
         /**
          * Soft-revoke a provider key
-         * @description Clerk developer sessions require a recent second factor.
+         * @description Clerk developer sessions require a recent sign-in check.
          */
         delete: operations["revokeProviderKey"];
         options?: never;
@@ -657,7 +704,7 @@ export interface paths {
         put?: never;
         /**
          * Rotate a write-only provider key
-         * @description Clerk developer sessions require a recent second factor.
+         * @description Clerk developer sessions require a recent sign-in check.
          */
         post: operations["rotateProviderKey"];
         delete?: never;
@@ -736,7 +783,7 @@ export interface paths {
         put?: never;
         /**
          * Replace a management key, keeping the old one valid for an overlap window
-         * @description Mints a replacement with the same scope, app_ids, tool_groups, environment, and expires_at, and reveals its value once. The old key keeps working for overlap_seconds (default 86400, at most 604800) and then stops; 0 revokes it immediately. A key rotates at most once; a second rotation returns resource_conflict naming replaced_by_key_id. Revoked or expired keys cannot be rotated. Clerk dashboard sessions require recent second-factor verification. The audit event records both key IDs.
+         * @description Mints a replacement with the same scope, app_ids, tool_groups, environment, and expires_at, and reveals its value once. The old key keeps working for overlap_seconds (default 86400, at most 604800) and then stops; 0 revokes it immediately. A key rotates at most once; a second rotation returns resource_conflict naming replaced_by_key_id. Revoked or expired keys cannot be rotated. Clerk dashboard sessions require a recent sign-in check. The audit event records both key IDs.
          */
         post: operations["rotateManagementKey"];
         delete?: never;
@@ -850,7 +897,7 @@ export interface paths {
         put?: never;
         /**
          * Register a webhook and reveal its signing secret once
-         * @description Requires apply scope and the webhooks tool group; a Clerk developer session needs a recent second factor. The whsec_ signing secret is returned only in this response.
+         * @description Requires apply scope and the webhooks tool group; a Clerk developer session needs a recent sign-in check. The whsec_ signing secret is returned only in this response.
          */
         post: operations["createWebhook"];
         delete?: never;
@@ -887,7 +934,7 @@ export interface paths {
         put?: never;
         /**
          * Replay a delivery while retaining the event id
-         * @description Requires apply scope and the webhooks tool group. Re-sends the stored event to the endpoint it was addressed to; no second factor is needed for a Clerk developer session.
+         * @description Requires apply scope and the webhooks tool group. Re-sends the stored event to the endpoint it was addressed to; no sign-in check is needed for a Clerk developer session.
          */
         post: operations["replayWebhookDelivery"];
         delete?: never;
@@ -911,14 +958,14 @@ export interface paths {
         post?: never;
         /**
          * Delete a webhook endpoint
-         * @description Requires apply scope and the webhooks tool group; a Clerk developer session needs a recent second factor.
+         * @description Requires apply scope and the webhooks tool group; a Clerk developer session needs a recent sign-in check.
          */
         delete: operations["deleteWebhook"];
         options?: never;
         head?: never;
         /**
          * Update webhook URL, event registry, or enabled state
-         * @description Requires apply scope and the webhooks tool group; a Clerk developer session needs a recent second factor.
+         * @description Requires apply scope and the webhooks tool group; a Clerk developer session needs a recent sign-in check.
          */
         patch: operations["updateWebhook"];
         trace?: never;
@@ -934,7 +981,7 @@ export interface paths {
         put?: never;
         /**
          * Rotate and reveal a webhook signing secret once
-         * @description Requires apply scope and the webhooks tool group; a Clerk developer session needs a recent second factor. The new whsec_ signing secret is returned only in this response; the previous one stops working immediately.
+         * @description Requires apply scope and the webhooks tool group; a Clerk developer session needs a recent sign-in check. The new whsec_ signing secret is returned only in this response; the previous one stops working immediately.
          */
         post: operations["rotateWebhookSecret"];
         delete?: never;
@@ -954,7 +1001,7 @@ export interface paths {
         put?: never;
         /**
          * Grant units idempotently
-         * @description X-Idempotency-Key is required; a body idempotency_key is refused (invalid_request, detail.reason unknown_field). Requires apply scope and the credits tool group. A reused key with the same body returns the original grant; the same key with a different body returns resource_conflict. Clerk dashboard sessions require recent second-factor verification.
+         * @description X-Idempotency-Key is required; a body idempotency_key is refused (invalid_request, detail.reason unknown_field). Requires apply scope and the credits tool group. A reused key with the same body returns the original grant; the same key with a different body returns resource_conflict. Clerk dashboard sessions require a recent sign-in check.
          */
         post: operations["createGrant"];
         delete?: never;
@@ -974,7 +1021,7 @@ export interface paths {
         put?: never;
         /**
          * Add or deduct credits with a signed history entry
-         * @description Records a positive or negative adjustment and returns the resulting balance. Creates the user when external_id is unknown, matching the grant endpoint. A negative adjustment that would take available below zero fails with insufficient_balance (detail.available, detail.units), unless allow_negative is true. allow_negative defaults to true when reason is clawback and false otherwise. X-Idempotency-Key is required: the same key and body replay the original result with idempotent=true; the same key with a different body returns resource_conflict. Requires the credits tool group. Clerk dashboard sessions require recent second-factor verification. Emits credits.adjusted.
+         * @description Records a positive or negative adjustment and returns the resulting balance. Creates the user when external_id is unknown, matching the grant endpoint. A negative adjustment that would take available below zero fails with insufficient_balance (detail.available, detail.units), unless allow_negative is true. allow_negative defaults to true when reason is clawback and false otherwise. X-Idempotency-Key is required: the same key and body replay the original result with idempotent=true; the same key with a different body returns resource_conflict. Requires the credits tool group. Clerk dashboard sessions require a recent sign-in check. Emits credits.adjusted.
          */
         post: operations["adjustCredits"];
         delete?: never;
@@ -999,13 +1046,13 @@ export interface paths {
         get?: never;
         /**
          * Schedule a configured tier for an app user
-         * @description Creates the user when external_id is unknown, matching the grant endpoint. The assigned tier becomes active on that user's first lazy allowance grant in the next UTC calendar month. Exception: assigning an unlimited tier, or any change while the active tier is unlimited, takes effect immediately. expires_at (optional, RFC 3339, in the future and after the assignment takes effect) ends the assignment; when omitted it defaults to the start plus the tier's default_duration_days, if set, and otherwise the assignment is open-ended. An ended assignment returns the user to the app's default tier on the next balance read or metered request (and at the end time for idle users), recorded as an expire change with a tier.expired webhook; tier.expiring is sent expiry_notice_days (default 3) before. top_up_now additionally grants only the positive, not-yet-credited difference between the active and target monthly allowances for the current UTC month (it expires with that month when the target tier's allowance_rollover is expire); downgrades never claw back units. Replays with the same X-Idempotency-Key do not repeat the mutation, audit event, or top-up. Requires apply scope and the plans tool group. Clerk dashboard sessions require recent second-factor verification.
+         * @description Creates the user when external_id is unknown, matching the grant endpoint. The assigned tier becomes active on that user's first lazy allowance grant in the next UTC calendar month. Exception: assigning an unlimited tier, or any change while the active tier is unlimited, takes effect immediately. expires_at (optional, RFC 3339, in the future and after the assignment takes effect) ends the assignment; when omitted it defaults to the start plus the tier's default_duration_days, if set, and otherwise the assignment is open-ended. An ended assignment returns the user to the app's default tier on the next balance read or metered request (and at the end time for idle users), recorded as an expire change with a tier.expired webhook; tier.expiring is sent expiry_notice_days (default 3) before. top_up_now additionally grants only the positive, not-yet-credited difference between the active and target monthly allowances for the current UTC month (it expires with that month when the target tier's allowance_rollover is expire); downgrades never claw back units. Replays with the same X-Idempotency-Key do not repeat the mutation, audit event, or top-up. Requires apply scope and the plans tool group. Clerk dashboard sessions require a recent sign-in check.
          */
         put: operations["assignUserTier"];
         post?: never;
         /**
          * Schedule a user to return to the app default tier
-         * @description Creates the user when external_id is unknown, matching the grant endpoint, and schedules the app's current default tier for the next UTC calendar month. When the active tier is unlimited the revert takes effect immediately. top_up_now follows the same positive-delta, no-clawback semantics as assignment. Requires apply scope and the plans tool group. Clerk dashboard sessions require recent second-factor verification.
+         * @description Creates the user when external_id is unknown, matching the grant endpoint, and schedules the app's current default tier for the next UTC calendar month. When the active tier is unlimited the revert takes effect immediately. top_up_now follows the same positive-delta, no-clawback semantics as assignment. Requires apply scope and the plans tool group. Clerk dashboard sessions require a recent sign-in check.
          */
         delete: operations["revertUserTier"];
         options?: never;
@@ -1024,7 +1071,7 @@ export interface paths {
         put?: never;
         /**
          * Reverse a grant idempotently
-         * @description Requires apply scope and the credits tool group. A reversal may take the balance negative when the credits were already spent. Reversing an already reversed grant returns it unchanged; an unknown grantId returns resource_not_found. Clerk dashboard sessions require recent second-factor verification.
+         * @description Requires apply scope and the credits tool group. A reversal may take the balance negative when the credits were already spent. Reversing an already reversed grant returns it unchanged; an unknown grantId returns resource_not_found. Clerk dashboard sessions require a recent sign-in check.
          */
         post: operations["reverseGrant"];
         delete?: never;
@@ -1196,7 +1243,7 @@ export interface paths {
         };
         /**
          * List, filter, sort, or export active users for an app
-         * @description Each row reports unlimited and unlimited_until with the same meaning as GET /v1/balance and the single-user read: an assignment whose end has passed is not reported as unlimited. Filters combine with AND; pagination.total counts the users matching them, ignoring cursor and limit, up to 10,000: when more match, total is 10,000 and pagination.total_capped is true (show it as "10,000+"). The count is capped so a page reads a bounded number of rows however many users the app has. spend_units is units settled, all time; last_active_at is the user's latest settled request; paying means a consumable purchase that is not refunded, or an active subscription, in the live environment (the test environment for a test-environment key). sort defaults to id (ascending); every other sort defaults to direction desc and breaks ties by id. A cursor is valid only for the sort and direction that issued it. format=csv returns the same filters and order as CSV (header row, CRLF line ends), at most 10,000 rows from the cursor on; X-Weirgate-Total-Count (capped at 10,000), X-Weirgate-Total-Capped, and X-Weirgate-Truncated report the match count, whether it is capped, and whether rows were cut. Text cells starting with =, +, -, @, tab, or carriage return are prefixed with an apostrophe so spreadsheets do not run them. Requires the usage tool group.
+         * @description Each row reports unlimited and unlimited_until with the same meaning as GET /v1/balance and the single-user read: an assignment whose end has passed is not reported as unlimited. Filters combine with AND; pagination.total counts the users matching them, ignoring cursor and limit, up to 10,000: when more match, total is 10,000 and pagination.total_capped is true (show it as "10,000+"). The count is capped so a page reads a bounded number of rows however many users the app has. Sandbox fixture users (origin sandbox) are listed, so the dashboard can label them, but pagination.total never counts them; pagination.sandbox_total counts the sandbox users matching the same filters. origin narrows the list to one origin. spend_units is units settled, all time; last_active_at is the user's latest settled request; paying means a consumable purchase that is not refunded, or an active subscription, in the live environment (the test environment for a test-environment key). sort defaults to id (ascending); every other sort defaults to direction desc and breaks ties by id. A cursor is valid only for the sort and direction that issued it. format=csv returns the same filters and order as CSV (header row, CRLF line ends), at most 10,000 rows from the cursor on; X-Weirgate-Total-Count (capped at 10,000), X-Weirgate-Sandbox-Count, X-Weirgate-Total-Capped, and X-Weirgate-Truncated report the match count (sandbox users excluded), the sandbox match count, whether it is capped, and whether rows were cut. Text cells starting with =, +, -, @, tab, or carriage return are prefixed with an apostrophe so spreadsheets do not run them. Requires the usage tool group.
          */
         get: operations["listUsers"];
         put?: never;
@@ -1218,7 +1265,7 @@ export interface paths {
         put?: never;
         /**
          * Grant or deduct credits for a filtered set of users, in two steps
-         * @description Step 1, preview (dry_run true): resolves filter (the users listing's filters) in user-id order, at most 500 users per call, and returns the matched count, the count this call covers, a sample, would_refuse (deductions the balance would refuse), and a preview_token bound to that exact user set and body for one hour. A larger segment continues by previewing again with next_cursor. Positive units are grants (source defaults to bulk; reason is kept in the audit log); negative units are adjustments with the same rules as the single adjustment route, including insufficient_balance unless allow_negative. Step 2, apply: send only preview_token with X-Idempotency-Key. Each user's write uses the key bulk:<X-Idempotency-Key>:<user id>, so a retry with the same key and token replays (idempotent true) and writes nothing new, even after the preview expires. The same key with another token, or the same token with another key, returns resource_conflict. Users deleted since the preview are skipped (user_unavailable); results report each user's status and balance. Every new grant or adjustment writes its own audit row (grant.created or credits.adjusted, with bulk_preview) and webhook event, so a 500-user call can emit 500 webhook events; the first apply also writes one grant.bulk_applied summary row. Requires apply scope and the credits tool group. Clerk dashboard sessions require recent second-factor verification for both steps.
+         * @description Step 1, preview (dry_run true): resolves filter (the users listing's filters) in user-id order, at most 500 users per call, and returns the matched count, the count this call covers, a sample, would_refuse (deductions the balance would refuse), and a preview_token bound to that exact user set and body for one hour. A larger segment continues by previewing again with next_cursor. Positive units are grants (source defaults to bulk; reason is kept in the audit log); negative units are adjustments with the same rules as the single adjustment route, including insufficient_balance unless allow_negative. Step 2, apply: send only preview_token with X-Idempotency-Key. Each user's write uses the key bulk:<X-Idempotency-Key>:<user id>, so a retry with the same key and token replays (idempotent true) and writes nothing new, even after the preview expires. The same key with another token, or the same token with another key, returns resource_conflict. Users deleted since the preview are skipped (user_unavailable); results report each user's status and balance. Every new grant or adjustment writes its own audit row (grant.created or credits.adjusted, with bulk_preview) and webhook event, so a 500-user call can emit 500 webhook events; the first apply also writes one grant.bulk_applied summary row. Requires apply scope and the credits tool group. Clerk dashboard sessions require recent a sign-in check for both steps.
          */
         post: operations["bulkGrant"];
         delete?: never;
@@ -1300,13 +1347,13 @@ export interface paths {
         get: operations["getAppleServerApiCredentials"];
         /**
          * Store App Store Server API credentials for consumption reports
-         * @description Optional. Needed only to answer CONSUMPTION_REQUEST notifications (payments.apple.send_consumption_info); checking purchases and notifications never uses them. Requires apply scope, the setup tool group, and a live grant; a Clerk developer session needs a recent second factor. private_key is the .p8 file from App Store Connect (In-App Purchase key); it is stored only as AES-GCM ciphertext bound to the tenant, app, and provider, and is never returned.
+         * @description Optional. Needed only to answer CONSUMPTION_REQUEST notifications (payments.apple.send_consumption_info); checking purchases and notifications never uses them. Requires apply scope, the setup tool group, and a live grant; a Clerk developer session needs a recent sign-in check. private_key is the .p8 file from App Store Connect (In-App Purchase key); it is stored only as AES-GCM ciphertext bound to the tenant, app, and provider, and is never returned.
          */
         put: operations["putAppleServerApiCredentials"];
         post?: never;
         /**
          * Delete the stored App Store Server API credentials
-         * @description A Clerk developer session requires a recent second factor.
+         * @description A Clerk developer session requires a recent sign-in check.
          */
         delete: operations["deleteAppleServerApiCredentials"];
         options?: never;
@@ -1333,7 +1380,7 @@ export interface paths {
         post?: never;
         /**
          * Anonymize identity while retaining money history
-         * @description A Clerk developer session requires a recent second factor.
+         * @description A Clerk developer session requires a recent sign-in check.
          */
         delete: operations["anonymizeUser"];
         options?: never;
@@ -1392,7 +1439,7 @@ export interface paths {
         get: operations["getConfig"];
         /**
          * Apply a config document directly with apply scope
-         * @description Ruleset changes are rejected and must use preview-bound proposals. Keys the schema doesn't define are refused with invalid_request, detail.reason unknown_field, and detail.unknown (dotted paths), instead of being dropped; a value that fails validation lists detail.issues. A config read can be sent back unchanged: its read-only fields (revision, revisions, each feature's provider_policy, and funding.source) are ignored. With X-Weirgate-Test-Run (platform key), the document may create the run's internal test tenants and change or remove only them; every other tenant must be sent unchanged and is left untouched.
+         * @description Ruleset changes are rejected and must use preview-bound proposals. Keys the schema doesn't define are refused with invalid_request, detail.reason unknown_field, and detail.unknown (dotted paths), instead of being dropped; a value that fails validation lists detail.issues. A config read can be sent back unchanged: its read-only fields (revision, revisions, each feature's provider_policy, and funding.source) are ignored. With X-Weirgate-Test-Run (platform key), the document may create the run's internal test tenants and change or remove only them; every other tenant must be sent unchanged and is left untouched. The platform key sends a ConfigDocument (every tenant); a TenantConfig is refused with invalid_request. A tenant key sends its own TenantConfig.
          */
         put: operations["applyConfigDirect"];
         post?: never;
@@ -1454,7 +1501,7 @@ export interface paths {
         put?: never;
         /**
          * Apply a proposal by reference with base-revision CAS
-         * @description A Clerk developer session requires a recent second factor. If the change commits but the response or a follow-up step fails, the route returns the committed revision, or `500 internal` with `detail.applied: true`, `proposal_id`, and `revision`; replaying the apply then returns that revision with `idempotent: true`.
+         * @description A Clerk developer session requires a recent sign-in check. If the change commits but the response or a follow-up step fails, the route returns the committed revision, or `500 internal` with `detail.applied: true`, `proposal_id`, and `revision`; replaying the apply then returns that revision with `idempotent: true`.
          */
         post: operations["applyConfigProposal"];
         delete?: never;
@@ -1662,9 +1709,29 @@ export interface paths {
         put?: never;
         /**
          * Create a named deterministic sandbox session
-         * @description Clerk developer sessions require a recent second factor.
+         * @description Clerk developer sessions require a recent sign-in check.
          */
         post: operations["createSandboxSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/apps/{app_id}/sandbox/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the app's sandbox runs, newest first
+         * @description Every sandbox fixture run of the app across sessions, newest first. Sandbox activity is left out of usage totals, the users count, alerts, and insights, so this is where it shows. limit defaults to 50 (at most 200). Requires the sandbox tool group.
+         */
+        get: operations["listSandboxRuns"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1699,7 +1766,7 @@ export interface paths {
         put?: never;
         /**
          * Run a named deterministic fixture
-         * @description Clerk developer sessions require a recent second factor.
+         * @description Clerk developer sessions require a recent sign-in check.
          */
         post: operations["runSandboxFixture"];
         delete?: never;
@@ -1805,6 +1872,9 @@ export interface components {
             environment: "live";
             /** Format: date-time */
             expires_at: string;
+            /** @description Minutes since the session last verified its first factor (dashboard sessions only). */
+            first_factor_age_minutes?: number | null;
+            /** @description Minutes since the last second factor; null when the user has none. */
             second_factor_age_minutes: number | null;
         };
         AgentDocSummary: {
@@ -2841,6 +2911,9 @@ export interface components {
                 created_at?: string;
             }[];
             provisioned: boolean;
+            /** @description Minutes since the session last verified its first factor. */
+            first_factor_age_minutes: number | null;
+            /** @description Minutes since the last second factor; null when the user has none. */
             second_factor_age_minutes: number | null;
             /** @constant */
             api_version: "2026-07-18";
@@ -3331,11 +3404,13 @@ export interface components {
             active_users: number;
             refusals: number;
         };
-        /** @description totals, groups, and series cover every settled request in the window. limit caps the number of groups (largest by requests first); pagination.truncated says groups were left out. window_events equals totals.requests. */
+        /** @description totals, groups, and series cover every settled request in the window except sandbox fixture requests, which sandbox_requests counts on its own. limit caps the number of groups (largest by requests first); pagination.truncated says groups were left out. window_events equals totals.requests. */
         UsageRollupPage: {
             /** @enum {string} */
             group_by: "feature" | "user" | "model" | "funding_rail" | "refusal_code";
             window_events: number;
+            /** @description Settled sandbox success-fixture requests in the window (always 0 units and $0). Never part of totals, groups, series, or active_users. */
+            sandbox_requests: number;
             window: components["schemas"]["QueryWindow"];
             pagination: components["schemas"]["Pagination"];
             groups: components["schemas"]["UsageRollup"][];
@@ -3680,6 +3755,11 @@ export interface components {
             app_account_token: string;
             /** @description The store subscription that set the active tier; null for manual assignments and the default tier. */
             tier_subscription_id: string | null;
+            /**
+             * @description real for end users; test for an automated run's machine users (counted like any user); sandbox for a sandbox fixture user (sandbox:<session id>), listed and labelled but left out of every total, count, series, alert, and insight.
+             * @enum {string}
+             */
+            origin: "real" | "test" | "sandbox";
         };
         /** @description UserRow plus the user's unlimited state and balance split, matching the single-user read's UserBalance (allowance_available + purchased_available = available). */
         UserListRow: {
@@ -3706,6 +3786,11 @@ export interface components {
             app_account_token: string;
             /** @description The store subscription that set the active tier; null for manual assignments and the default tier. */
             tier_subscription_id: string | null;
+            /**
+             * @description real for end users; test for an automated run's machine users (counted like any user); sandbox for a sandbox fixture user (sandbox:<session id>), listed and labelled but left out of every total, count, series, alert, and insight.
+             * @enum {string}
+             */
+            origin: "real" | "test" | "sandbox";
             /** @description True while the active tier is unlimited and its assignment has not ended. */
             unlimited: boolean;
             /**
@@ -3878,7 +3963,7 @@ export interface components {
             name: string;
             /** Format: date-time */
             created_at: string;
-            /** @description Present on GET; the session's runs, oldest first. */
+            /** @description Present on GET; the session's runs, newest first. */
             runs?: components["schemas"]["SandboxRun"][];
         };
         SandboxRun: {
@@ -4110,6 +4195,59 @@ export interface components {
             content: {
                 "application/json": {
                     data: components["schemas"]["DeveloperMember"][];
+                };
+            };
+        };
+        /** @description The person is no longer on the team */
+        DeveloperMemberRemovedOk: {
+            headers: {
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    id: string;
+                    /** @constant */
+                    removed: true;
+                    /**
+                     * @description Whether this call removed the Clerk organization membership or found it already gone.
+                     * @enum {string}
+                     */
+                    clerk_membership: "removed" | "already_absent";
+                };
+            };
+        };
+        /** @description The invitation is sent */
+        DeveloperInvitationCreated: {
+            headers: {
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    /** @description Clerk organization invitation id */
+                    id: string;
+                    status: string;
+                    /** @constant */
+                    role: "member";
+                };
+            };
+        };
+        /** @description The invitation is revoked */
+        DeveloperInvitationRevokedOk: {
+            headers: {
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    id: string;
+                    /** @constant */
+                    status: "revoked";
+                    already_revoked: boolean;
                 };
             };
         };
@@ -4510,8 +4648,10 @@ export interface components {
             headers: {
                 "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
                 "X-Weirgate-Request-Id": components["headers"]["RequestId"];
-                /** @description CSV only. Users matching the filters, at most 10,000. */
+                /** @description CSV only. Users matching the filters, at most 10,000. Sandbox users are not counted. */
                 "X-Weirgate-Total-Count"?: number;
+                /** @description CSV only. Sandbox users matching the filters, at most 10,000. */
+                "X-Weirgate-Sandbox-Count"?: number;
                 /** @description CSV only. true when more than 10,000 users match, so X-Weirgate-Total-Count is the cap. */
                 "X-Weirgate-Total-Capped"?: "true" | "false";
                 /** @description CSV only. true when more than 10,000 rows matched from the cursor on. */
@@ -4526,9 +4666,11 @@ export interface components {
                         returned: number;
                         truncated: boolean;
                         next_cursor: string | null;
-                        /** @description Users matching the filters, ignoring cursor and limit, at most 10,000. */
+                        /** @description Users matching the filters, ignoring cursor and limit, at most 10,000. Sandbox users are never counted. */
                         total: number;
-                        /** @description true when more than 10,000 users match; total is then 10,000. */
+                        /** @description Sandbox users matching the filters (listed in data with origin sandbox), at most 10,000. */
+                        sandbox_total: number;
+                        /** @description true when more than 10,000 users (sandbox included) match; total is then at most 10,000. */
                         total_capped: boolean;
                     };
                 };
@@ -4809,6 +4951,25 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["SandboxSession"];
+            };
+        };
+        /** @description The app's sandbox runs, newest first */
+        SandboxRunsOk: {
+            headers: {
+                "Weirgate-Api-Version": components["headers"]["WeirgateApiVersion"];
+                "X-Weirgate-Request-Id": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    app_id: components["schemas"]["AppId"];
+                    data: components["schemas"]["SandboxRun"][];
+                    pagination: {
+                        limit: number;
+                        returned: number;
+                        truncated: boolean;
+                    };
+                };
             };
         };
         /** @description Sandbox session and runs */
@@ -6461,6 +6622,25 @@ export interface operations {
             403: components["responses"]["InsufficientScope"];
         };
     };
+    removeDeveloperMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                developer_identity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["DeveloperMemberRemovedOk"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+            409: components["responses"]["ResourceConflict"];
+            502: components["responses"]["ErrorProviderUnavailable"];
+        };
+    };
     updateDeveloperMemberRole: {
         parameters: {
             query?: never;
@@ -6484,6 +6664,51 @@ export interface operations {
             401: components["responses"]["InvalidToken"];
             403: components["responses"]["InsufficientScope"];
             404: components["responses"]["ResourceNotFound"];
+            409: components["responses"]["ResourceConflict"];
+            502: components["responses"]["ErrorProviderUnavailable"];
+        };
+    };
+    createDeveloperInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: email */
+                    email_address: string;
+                };
+            };
+        };
+        responses: {
+            201: components["responses"]["DeveloperInvitationCreated"];
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            409: components["responses"]["ResourceConflict"];
+            502: components["responses"]["ErrorProviderUnavailable"];
+        };
+    };
+    revokeDeveloperInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invitation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["DeveloperInvitationRevokedOk"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+            409: components["responses"]["ResourceConflict"];
+            502: components["responses"]["ErrorProviderUnavailable"];
         };
     };
     exchangeSessionGrant: {
@@ -7404,6 +7629,8 @@ export interface operations {
                 inactive_since?: components["parameters"]["UserFilterInactiveSince"];
                 /** @description true keeps only paying users; false keeps only non-paying users. */
                 paying?: components["parameters"]["UserFilterPaying"];
+                /** @description Only users of this origin. Unset lists every origin, sandbox users included. */
+                origin?: "real" | "test" | "sandbox";
                 sort?: "id" | "spend" | "last_active" | "balance" | "created";
                 /** @description Defaults to asc for sort id and desc for every other sort. */
                 direction?: "asc" | "desc";
@@ -8071,6 +8298,26 @@ export interface operations {
         requestBody?: components["requestBodies"]["SandboxSessionBody"];
         responses: {
             201: components["responses"]["SandboxSessionCreated"];
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["InvalidToken"];
+            403: components["responses"]["InsufficientScope"];
+            404: components["responses"]["ResourceNotFound"];
+        };
+    };
+    listSandboxRuns: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                app_id: components["parameters"]["AppIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["SandboxRunsOk"];
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["InvalidToken"];
             403: components["responses"]["InsufficientScope"];

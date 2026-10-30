@@ -27,7 +27,10 @@ export type Accepted = components["schemas"]["Accepted"];
 export type OutputContract = components["schemas"]["OutputContract"];
 export type UsageRollup = components["schemas"]["UsageRollup"];
 export type UsageRollupPage = components["schemas"]["UsageRollupPage"];
+/** `origin` is `real`, `test` (an automated test run's user), or `sandbox` (a sandbox fixture's user). */
 export type UserRow = components["schemas"]["UserRow"];
+/** Where a user came from. Sandbox users are listed but never counted in `pagination.total`. */
+export type UserOrigin = UserRow["origin"];
 /** One settled request, as the management API reads it (e.g. `UserCredits` recent usage). */
 export type UsageEvent = components["schemas"]["UsageEvent"];
 /**
@@ -73,13 +76,29 @@ export type UserStatusReason = components["schemas"]["UserStatusReason"];
 /** One row of `listUsers`: `UserRow` plus unlimited state, balance split, activity, and spend. */
 export type UserListRow = components["schemas"]["UserListRow"];
 /**
- * A `listUsers` page. `pagination.total` counts every matching user up to 10,000; when
- * `pagination.total_capped` is true more match, so show the count as "10,000+".
+ * A `listUsers` page. `pagination.total` counts every matching user up to 10,000, sandbox
+ * users excluded (`pagination.sandbox_total` counts those); when `pagination.total_capped`
+ * is true more match, so show the count as "10,000+".
  */
 export type UserListPage = components["responses"]["UserListOk"]["content"]["application/json"];
 export type ManagementKeyMetadata = components["schemas"]["ManagementKeyMetadata"];
 export type ManagementKeyRotateInput = Partial<components["schemas"]["ManagementKeyRotateInput"]>;
 export type RotatedManagementKey = components["schemas"]["RotatedManagementKey"];
+/** A person on the team. `role` is Weirgate's; the Clerk organization role follows it. */
+export type DeveloperMember = components["schemas"]["DeveloperMember"];
+/** `owner` or `member`. */
+export type DeveloperRole = DeveloperMember["role"];
+/** `listMembers` result. */
+export type DeveloperMemberList = components["responses"]["DeveloperMemberListOk"]["content"]["application/json"];
+/**
+ * `removeMember` result. `clerk_membership` is `already_absent` when an earlier attempt
+ * already removed the Clerk membership (a retry still removes the Weirgate one).
+ */
+export type DeveloperMemberRemoval = components["responses"]["DeveloperMemberRemovedOk"]["content"]["application/json"];
+/** `createInvitation` result. `id` is the Clerk organization invitation id. */
+export type DeveloperInvitation = components["responses"]["DeveloperInvitationCreated"]["content"]["application/json"];
+/** `revokeInvitation` result. `already_revoked` is true when it was revoked before. */
+export type DeveloperInvitationRevocation = components["responses"]["DeveloperInvitationRevokedOk"]["content"]["application/json"];
 
 export const API_VERSION = "2026-07-18" as const;
 
@@ -240,6 +259,8 @@ export interface ListUsersQuery {
   activeSince?: string | Date | undefined;
   inactiveSince?: string | Date | undefined;
   paying?: boolean | undefined;
+  /** Only users of this origin. Unset lists every origin, sandbox users included. */
+  origin?: UserOrigin | undefined;
   sort?: "id" | "spend" | "last_active" | "balance" | "created" | undefined;
   direction?: "asc" | "desc" | undefined;
   signal?: AbortSignal | undefined;

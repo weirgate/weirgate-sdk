@@ -346,6 +346,49 @@ every match up to 10,000; when `pagination.total_capped` is true more match, so 
 count as "10,000+". Pass `pagination.next_cursor` as `cursor`, with the same sort and
 direction, for the next page.
 
+Sandbox fixture users are listed with `origin: "sandbox"` (others are `real` or `test`)
+but never counted in `pagination.total`; `pagination.sandbox_total` counts them. Pass
+`origin` to list only one kind.
+
+## Team members and invitations
+
+The team methods use a dashboard sign-in, not a management key: pass the person's Clerk
+session token as `sessionToken` (a string or a function returning one). They never send
+`adminKey`.
+
+```ts
+const weirgate = new Weirgate({ sessionToken: () => clerk.session!.getToken() });
+const { data } = await weirgate.listMembers();          // data.data: DeveloperMember[]
+await weirgate.updateMemberRole(memberId, "owner");     // the Clerk org role follows
+await weirgate.removeMember(memberId);                  // safe to retry
+const invitation = await weirgate.createInvitation("new@example.com");
+await weirgate.revokeInvitation(invitation.data.id);
+```
+
+Anyone on the team can list members. Changing a role, removing someone, and inviting or
+revoking need an owner with a recent sign-in check. Refusals are `ResourceConflictError`
+with `detail.reason`: `last_owner`, `self_removal`, `invitation_exists`, `already_member`,
+`invitation_not_pending`, or `clerk_refused`. A Clerk outage is `provider_unavailable`
+(`detail.service: "clerk"`) and changes nothing.
+
+### Recent sign-in check (step-up)
+
+Sensitive dashboard actions (team changes, apply, key minting, billing, ...) need the
+person to have re-verified in the last 10 minutes. Without it the SDK throws
+`StepUpRequiredError` (`insufficient_scope`, 403). Its `level` is the check to ask for:
+`second_factor` when the account has one, otherwise `first_factor` (the password).
+
+```ts
+try {
+  await weirgate.removeMember(memberId);
+} catch (error) {
+  if (error instanceof StepUpRequiredError) {
+    await reverify(error.level); // e.g. Clerk's reverification at this level
+    await weirgate.removeMember(memberId);
+  } else throw error;
+}
+```
+
 ## Exporting usage for billing and reconciliation
 
 Two reads (a key with the `usage` tool group) export settled usage for a window:

@@ -2,6 +2,48 @@
 
 All notable public SDK changes are recorded here.
 
+## @weirgate/sdk 0.10.0 and WeirgateKit 0.7.1 — 2026-10-29
+
+Team members and invitations (weirgate#289, #290, #291), the step-up refusal shape
+(weirgate#292), and sandbox users (weirgate#282). Spec provenance moves to
+weirgate-platform `7f84cf1` (both SDKs), and names the renamed repository
+`weirgate/weirgate-platform` (weirgate-sdk#41). The generator now writes WeirgateKit's
+provenance too, so the two SDKs always name the same spec.
+
+Minor bump for TypeScript: new methods, an error class, a client option, and new
+response fields; no existing call signatures changed. Patch bump for WeirgateKit: only
+its spec provenance changed. It has no management client, and these are dashboard and
+management routes.
+
+### TypeScript (@weirgate/sdk 0.10.0)
+
+- New client option `sessionToken` (string or function): a dashboard sign-in (Clerk
+  session token). The team methods send it as `Authorization: Bearer` and never send
+  `adminKey`.
+- `listMembers()`: `GET /v1/admin/members`.
+- `updateMemberRole(developerIdentityId, role)`: `PATCH /v1/admin/members/{id}`.
+- `removeMember(developerIdentityId)`: `DELETE /v1/admin/members/{id}`.
+- `createInvitation(emailAddress)`: `POST /v1/admin/invitations`.
+- `revokeInvitation(invitationId)`: `POST /v1/admin/invitations/{invitation_id}/revoke`.
+- `StepUpRequiredError` (a `WeirgateError`): `insufficient_scope` with
+  `detail.reason: step_up_required`. `level` is `first_factor` or `second_factor`, and
+  `maxAgeMinutes` is how recent the check must be. Other `insufficient_scope` refusals
+  stay plain `WeirgateError`.
+- `listUsers` takes `origin` (`real`, `test`, or `sandbox`).
+- New exported types: `DeveloperMember`, `DeveloperRole`, `DeveloperMemberList`,
+  `DeveloperMemberRemoval`, `DeveloperInvitation`, `DeveloperInvitationRevocation`,
+  `UserOrigin`.
+- Regenerated types from weirgate-platform `7f84cf1`. Besides the above: users carry
+  `origin`; the users page has `pagination.sandbox_total` (sandbox users are no longer
+  counted in `total`); the usage rollup has `sandbox_requests`; developer sessions and
+  session grants have `first_factor_age_minutes`. The sandbox runs route
+  (`GET /v1/admin/apps/{app_id}/sandbox/runs`) is in the types only, with no method.
+
+### Swift (WeirgateKit 0.7.1)
+
+- `WeirgateKitInfo.specSourceCommit` and `Resources/spec-provenance.json` name
+  weirgate-platform `7f84cf1`. No API changes.
+
 ## @weirgate/sdk 0.9.0 — 2026-10-18
 
 Usage export and the per-user × rail rollup of weirgate#264 (weirgate-sdk#38). Spec

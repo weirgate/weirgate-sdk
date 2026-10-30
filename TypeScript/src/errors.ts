@@ -74,7 +74,8 @@ export class WeirgateError extends Error {
     const requestId = response.headers.get("x-weirgate-request-id")
       ?? envelope?.error?.request_id
       ?? "unavailable";
-    const ErrorClass = errorClassFor(type);
+    const detail = envelope?.error?.detail ? envelope.error.detail as Record<string, unknown> : null;
+    const ErrorClass = errorClassFor(type, detail);
     return new ErrorClass({
       type,
       rawType,
@@ -83,9 +84,7 @@ export class WeirgateError extends Error {
       requestId,
       apiVersion: response.headers.get("weirgate-api-version") ?? API_VERSION,
       ...(envelope?.error?.message ? { message: envelope.error.message } : {}),
-      ...(envelope?.error?.detail
-        ? { detail: envelope.error.detail as Record<string, unknown> }
-        : {}),
+      ...(detail ? { detail } : {}),
     });
   }
 }
@@ -94,8 +93,10 @@ type WeirgateErrorInput = ConstructorParameters<typeof WeirgateError>[0];
 
 const kindOf = (rawType: string): WeirgateErrorKind => isErrorType(rawType) ? rawType : "unrecognized";
 
-function errorClassFor(type: WeirgateErrorKind): typeof WeirgateError {
+function errorClassFor(type: WeirgateErrorKind, detail: Record<string, unknown> | null): typeof WeirgateError {
   switch (type) {
+    case "insufficient_scope":
+      return detail?.["reason"] === "step_up_required" ? StepUpRequiredError : WeirgateError;
     case "insufficient_balance": return InsufficientBalanceError;
     case "resource_conflict": return ResourceConflictError;
     case "funding_rail_refused": return FundingRailRefusedError;
@@ -120,7 +121,8 @@ export function errorFromStreamFrame(
 ): WeirgateError {
   const rawType = typeof frame.type === "string" ? frame.type : "internal";
   const type = kindOf(rawType);
-  const ErrorClass = errorClassFor(type);
+  const detail = frame.detail && typeof frame.detail === "object" ? frame.detail as Record<string, unknown> : null;
+  const ErrorClass = errorClassFor(type, detail);
   return new ErrorClass({
     type,
     rawType,
@@ -128,7 +130,7 @@ export function errorFromStreamFrame(
     requestId: typeof frame.request_id === "string" ? frame.request_id : metadata.requestId,
     apiVersion: metadata.apiVersion,
     ...(typeof frame.message === "string" ? { message: frame.message } : {}),
-    ...(frame.detail && typeof frame.detail === "object" ? { detail: frame.detail as Record<string, unknown> } : {}),
+    ...(detail ? { detail } : {}),
   });
 }
 
@@ -251,6 +253,29 @@ export class ResourceConflictError extends WeirgateError {
     this.name = "ResourceConflictError";
     const replacedBy = this.detail?.["replaced_by_key_id"];
     this.replacedByKeyId = typeof replacedBy === "string" ? replacedBy : null;
+  }
+}
+
+/**
+ * `insufficient_scope` (403) with `detail.reason: step_up_required`: a sensitive dashboard
+ * action (team, apply, key minting, billing, ...) needs a recent sign-in check. Ask the
+ * person to re-verify `level` (with Clerk, pass it to reverification), then retry.
+ */
+export class StepUpRequiredError extends WeirgateError {
+  declare readonly type: "insufficient_scope";
+  /**
+   * The check to perform: `second_factor` when the account has one, otherwise
+   * `first_factor` (the password).
+   */
+  readonly level: "first_factor" | "second_factor" | (string & {}) | null;
+  /** How recent the check must be, in minutes (10 today). */
+  readonly maxAgeMinutes: number | null;
+
+  constructor(input: WeirgateErrorInput) {
+    super(input);
+    this.name = "StepUpRequiredError";
+    this.level = stringDetail(this.detail, "level");
+    this.maxAgeMinutes = numberDetail(this.detail, "max_age_minutes");
   }
 }
 

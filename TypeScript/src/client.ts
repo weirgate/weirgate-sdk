@@ -13,6 +13,12 @@ import {
   type CreditAdjustmentInput,
   type CreditAdjustmentResult,
   type CreditWriteOptions,
+  type DeveloperInvitation,
+  type DeveloperInvitationRevocation,
+  type DeveloperMember,
+  type DeveloperMemberList,
+  type DeveloperMemberRemoval,
+  type DeveloperRole,
   type EmbeddingRequest,
   type EmbeddingResponse,
   type FeatureCatalog,
@@ -67,6 +73,11 @@ export interface WeirgateOptions {
   baseUrl?: string;
   token?: string | (() => string | Promise<string>);
   adminKey?: string;
+  /**
+   * A dashboard sign-in (Clerk session token) for the team methods (`listMembers`,
+   * `createInvitation`, ...). Those routes never accept `adminKey`.
+   */
+  sessionToken?: string | (() => string | Promise<string>);
   fetch?: typeof globalThis.fetch;
   /** Default starting rail for chat, streaming, and embeddings. Default: `"server_chain"`. */
   fundingPreference?: FundingPreference;
@@ -88,6 +99,8 @@ const CATALOG_REFRESH_MS = 5 * 60_000;
 interface InternalRequestOptions extends RequestOptions {
   headers?: HeadersInit | undefined;
   admin?: boolean | undefined;
+  /** Authenticate with `sessionToken` (team routes accept only a dashboard sign-in). */
+  session?: boolean | undefined;
   /** Reject a missing key instead of generating one. */
   requireIdempotencyKey?: boolean | undefined;
   /** Overrides the default `Accept` header. */
@@ -101,6 +114,7 @@ export class Weirgate {
   readonly baseUrl: string;
   private readonly token: WeirgateOptions["token"] | undefined;
   private readonly adminKey: string | undefined;
+  private readonly sessionToken: WeirgateOptions["sessionToken"] | undefined;
   private readonly fetcher: typeof globalThis.fetch;
   private fundingPreference: FundingPreference;
   private planCredential: PlanCredentialSource | undefined;
@@ -113,6 +127,7 @@ export class Weirgate {
     this.baseUrl = (options.baseUrl ?? "https://api.weirgate.com").replace(/\/$/, "");
     this.token = options.token;
     this.adminKey = options.adminKey;
+    this.sessionToken = options.sessionToken;
     this.fetcher = options.fetch ?? globalThis.fetch;
     if (!this.fetcher) throw new TypeError("A Fetch API implementation is required");
     this.fundingPreference = options.fundingPreference ?? "server_chain";
@@ -445,6 +460,7 @@ export class Weirgate {
     if (query.activeSince) parameters.set("active_since", dateParameter(query.activeSince));
     if (query.inactiveSince) parameters.set("inactive_since", dateParameter(query.inactiveSince));
     if (query.paying !== undefined) parameters.set("paying", String(query.paying));
+    if (query.origin) parameters.set("origin", query.origin);
     if (query.sort) parameters.set("sort", query.sort);
     if (query.direction) parameters.set("direction", query.direction);
     const suffix = parameters.size ? `?${parameters}` : "";
@@ -486,6 +502,76 @@ export class Weirgate {
       `/v1/admin/keys/${encodeURIComponent(keyId)}/rotate${suffix}`,
       input,
       { admin: true, signal: options.signal },
+    );
+  }
+
+  /**
+   * Everyone on the team, with their role. Needs `sessionToken`. Anyone Clerk no longer
+   * lists in the organization is removed first (audited with `detail.reason:
+   * clerk_membership_missing`).
+   */
+  listMembers(signal?: AbortSignal): Promise<WeirgateResult<DeveloperMemberList>> {
+    return this.requestJson("GET", "/v1/admin/members", undefined, { session: true, signal });
+  }
+
+  /**
+   * Change a person's role (owners only, recent sign-in check, else `StepUpRequiredError`).
+   * The Clerk organization role follows it. Demoting the last owner throws
+   * `ResourceConflictError` (`detail.reason: last_owner`); a Clerk outage throws
+   * `provider_unavailable` and changes nothing. Sending the current role re-syncs Clerk.
+   */
+  updateMemberRole(
+    developerIdentityId: string,
+    role: DeveloperRole,
+    signal?: AbortSignal,
+  ): Promise<WeirgateResult<DeveloperMember>> {
+    return this.requestJson(
+      "PATCH",
+      `/v1/admin/members/${encodeURIComponent(developerIdentityId)}`,
+      { role },
+      { session: true, signal },
+    );
+  }
+
+  /**
+   * Remove a person from the team (owners only, recent sign-in check): their Clerk
+   * organization membership, then their Weirgate membership. Safe to retry. Removing
+   * yourself or the last owner throws `ResourceConflictError` (`self_removal`, `last_owner`).
+   */
+  removeMember(developerIdentityId: string, signal?: AbortSignal): Promise<WeirgateResult<DeveloperMemberRemoval>> {
+    return this.requestJson(
+      "DELETE",
+      `/v1/admin/members/${encodeURIComponent(developerIdentityId)}`,
+      undefined,
+      { session: true, signal },
+    );
+  }
+
+  /**
+   * Invite an address to the team as a member (owners only, recent sign-in check); Clerk
+   * emails it. A pending invitation or someone already on the team throws
+   * `ResourceConflictError` (`invitation_exists`, `already_member`).
+   */
+  createInvitation(emailAddress: string, signal?: AbortSignal): Promise<WeirgateResult<DeveloperInvitation>> {
+    return this.requestJson(
+      "POST",
+      "/v1/admin/invitations",
+      { email_address: emailAddress },
+      { session: true, signal },
+    );
+  }
+
+  /**
+   * Revoke a pending invitation by its Clerk invitation id (owners only, recent sign-in
+   * check). Already revoked succeeds with `already_revoked: true`; an accepted or expired
+   * one throws `ResourceConflictError` (`invitation_not_pending`).
+   */
+  revokeInvitation(invitationId: string, signal?: AbortSignal): Promise<WeirgateResult<DeveloperInvitationRevocation>> {
+    return this.requestJson(
+      "POST",
+      `/v1/admin/invitations/${encodeURIComponent(invitationId)}/revoke`,
+      undefined,
+      { session: true, signal },
     );
   }
 
@@ -686,8 +772,13 @@ export class Weirgate {
     const headers = new Headers(options.headers);
     headers.set("Accept", options.accept ?? "application/json, text/event-stream");
     if (body !== undefined) headers.set("Content-Type", "application/json");
-    if (this.appId && !options.admin) headers.set("X-App-Id", this.appId);
-    if (options.admin) {
+    if (this.appId && !options.admin && !options.session) headers.set("X-App-Id", this.appId);
+    if (options.session) {
+      if (!this.sessionToken) {
+        throw new TypeError("sessionToken is required for team calls; they never accept adminKey");
+      }
+      headers.set("Authorization", `Bearer ${await resolve(this.sessionToken)}`);
+    } else if (options.admin) {
       if (!this.adminKey) throw new TypeError("adminKey is required for management API calls");
       headers.set("X-Admin-Key", this.adminKey);
     } else if (this.token) {
@@ -828,8 +919,12 @@ export class Weirgate {
   }
 
   private async resolveToken(): Promise<string> {
-    return typeof this.token === "function" ? await this.token() : this.token ?? "";
+    return this.token === undefined ? "" : await resolve(this.token);
   }
+}
+
+async function resolve(source: string | (() => string | Promise<string>)): Promise<string> {
+  return typeof source === "function" ? await source() : source;
 }
 
 function safeMethod(method: string): boolean {

@@ -10,6 +10,7 @@ export {
   PlatformAllowanceExhaustedError,
   ProviderRateLimitedError,
   ResourceConflictError,
+  StepUpRequiredError,
   UsageTruncatedError,
   UserCredentialExpiredError,
   UserProviderKeyInvalidError,
