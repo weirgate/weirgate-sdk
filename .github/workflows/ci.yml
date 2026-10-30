@@ -17,6 +17,7 @@ jobs:
         with:
           node-version: 22
       - run: node scripts/check-public-api-boundary.mjs
+      - run: node scripts/check-spec-provenance.mjs
 
   typescript:
     runs-on: ubuntu-latest

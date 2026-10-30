@@ -19,10 +19,26 @@ execFileSync(resolve(packageRoot, "node_modules/.bin/openapi-typescript"), [
 const sourceCommit = execFileSync("git", ["-C", dirname(input), "rev-parse", "HEAD"], {
   encoding: "utf8",
 }).trim();
-writeFileSync(resolve(packageRoot, "spec-provenance.json"), `${JSON.stringify({
+const provenance = {
   api_version: version,
   source_repository: "https://github.com/weirgate/weirgate-platform",
   source_path: "openapi.yaml",
   source_commit: sourceCommit,
+};
+writeFileSync(resolve(packageRoot, "spec-provenance.json"), `${JSON.stringify({
+  ...provenance,
   generator: "openapi-typescript",
 }, null, 2)}\n`);
+
+// WeirgateKit records the same provenance, in its bundled resource and in WeirgateKitInfo,
+// so the two SDKs cannot drift apart.
+const kitRoot = resolve(packageRoot, "../WeirgateKit/Sources/WeirgateKit");
+writeFileSync(resolve(kitRoot, "Resources/spec-provenance.json"), `${JSON.stringify(provenance, null, 2)}\n`);
+const kitInfoPath = resolve(kitRoot, "WeirgateKit.swift");
+let kitInfo = readFileSync(kitInfoPath, "utf8");
+for (const [name, value] of [["apiVersion", version], ["specSourceCommit", sourceCommit]]) {
+  const pattern = new RegExp(`(public static let ${name} = )"[^"]*"`);
+  if (!pattern.test(kitInfo)) throw new Error(`Could not find WeirgateKitInfo.${name} in ${kitInfoPath}`);
+  kitInfo = kitInfo.replace(pattern, `$1"${value}"`);
+}
+writeFileSync(kitInfoPath, kitInfo);
