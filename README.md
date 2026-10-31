@@ -89,3 +89,73 @@ recipes.
 
 Read the [SDK guide](https://weirgate.com/guides/sdks/) and
 [API reference](https://weirgate.com/reference/api/).
+
+## Develop and release
+
+This section is for maintainers. It assumes a checkout of
+[`weirgate/weirgate-platform`](https://github.com/weirgate/weirgate-platform) next to this one
+(`../weirgate-platform`), because the generator reads its `openapi.yaml`.
+
+### Prerequisites
+
+- Node 22 (the version CI uses) for `TypeScript/`.
+- Xcode with Swift on macOS 15 or later for `WeirgateKit/`.
+- For the npm publish only: the `weirgateadmin` npm account and its security key. Only the
+  founder has them, so a coding agent prepares the release and the founder runs
+  `npm publish`.
+
+### Build and test (what CI runs)
+
+```sh
+node scripts/check-public-api-boundary.mjs
+node scripts/check-spec-provenance.mjs
+(cd TypeScript && npm ci && npm test && npm run build && npm publish --dry-run)
+swift test
+swift test --package-path WeirgateKit
+```
+
+`node scripts/clean-consumer-proof.mjs` installs the packed npm tarball and the root Swift
+package into throwaway consumer projects; run it before a release. With `--published` it
+checks the published artifacts instead.
+
+### Release
+
+1. **Regenerate** from merged `weirgate-platform` `main`:
+   `cd TypeScript && npm run generate -- --input ../../weirgate-platform/openapi.yaml`.
+   This writes the TypeScript types and the spec provenance for both SDKs
+   (`TypeScript/spec-provenance.json`, WeirgateKit's `Resources/spec-provenance.json` and
+   `WeirgateKitInfo`).
+2. **Bump the versions** in the same PR. The TypeScript version is in
+   `TypeScript/package.json`. The WeirgateKit version is only its Git tag. Use a minor bump
+   for new methods or fields, a patch bump for fixes or a provenance-only change. Add a
+   `CHANGELOG.md` entry that names both versions and the source commit.
+3. **Check and merge.** Run the build and test commands above and the clean-consumer proof,
+   then squash-merge the PR.
+4. **Tag the merged commit** with annotated tags, and push them:
+
+   ```sh
+   git switch main && git fetch origin && git merge --ff-only origin/main
+   git tag -a @weirgate/sdk@X.Y.Z -m "@weirgate/sdk X.Y.Z"
+   git tag -a vA.B.C -m "WeirgateKit A.B.C"     # this tag is the Swift release
+   git push origin @weirgate/sdk@X.Y.Z vA.B.C
+   ```
+
+5. **Publish to npm (founder).** From `TypeScript/` at the tagged commit, in the founder's
+   own terminal:
+
+   ```sh
+   npm whoami                   # weirgateadmin
+   npm publish                  # publishConfig.access is public; approve with the security key
+   ```
+
+   An `E404` on publish means the npm login expired: `npm login`, then publish again. The
+   approval link expires after 5 minutes. "Cannot publish over X.Y.Z" means it already
+   succeeded.
+6. **Verify.** `npm view @weirgate/sdk dist-tags --prefer-online` shows the new `latest`
+   (about a minute after the publish), and `node scripts/clean-consumer-proof.mjs --published`
+   passes.
+7. **Update the install line.** In a follow-up PR, set the `from:` version in
+   [Install](#install) to the new WeirgateKit tag.
+
+Never move or delete a pushed tag: Swift Package Manager and npm consumers depend on it. To
+withdraw a bad npm version, use `npm deprecate` and release a fix.
